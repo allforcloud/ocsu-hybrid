@@ -418,9 +418,9 @@ uses `gh repo create` when the GitHub CLI is authenticated, otherwise the API
 when a token is configured, otherwise it stops and asks you to create an empty
 repository manually. The SSH key never appears in a URL.
 
-After publishing, replace the `your-org/ocsu-hybrid` placeholders in `README.md`
-and `pyproject.toml` with the real GitHub URL, and use the printed HF URL for
-the functional-group head.
+The repository URLs in this README and `pyproject.toml` point to the published
+locations. If you fork the project, update those URLs and the `fg_repo` field
+after publishing your own copies.
 
 ---
 
