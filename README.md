@@ -1,5 +1,7 @@
 # OCSU-Hybrid
 
+**English** | [简体中文](README.zh-CN.md)
+
 **A modular, runnable implementation of the OCSR-based route in
 [OCSU: Optical Chemical Structure Understanding for Molecule-centric Scientific
 Discovery](https://arxiv.org/abs/2501.15415).**
