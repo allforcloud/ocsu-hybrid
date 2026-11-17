@@ -1,0 +1,5 @@
+# BioT5+
+transformers>=4.45,<5
+sentencepiece>=0.1.99
+selfies>=2.0
+accelerate>=0.26

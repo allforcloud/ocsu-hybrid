@@ -1,0 +1,24 @@
+# Local publishing credentials for OCSU-Hybrid.
+#
+#   cp configs/local.example.yaml configs/local.yaml
+#
+# This file is gitignored. Never commit real tokens.
+# Use a Hugging Face write token for uploads. For GitHub, an SSH key is enough
+# to push; a PAT is only needed if you want the script to create the repository
+# through the API.
+#
+# Environment variables HF_TOKEN and GITHUB_TOKEN override the values below.
+
+huggingface:
+  username: ""
+  token: ""                 # hf_...; can be empty if `hf auth login` is configured
+  fg_repo: ""               # repo id, e.g. username/ocsu-hybrid-fg-convnext-t
+
+github:
+  username: ""
+  auth: "ssh"               # ssh | token
+  token: ""                 # only for auth: token or API repo creation
+  repo: ""                  # owner/name, e.g. username/ocsu-hybrid
+  branch: "main"
+  private: false            # public repository
+  create_repo: "auto"       # auto | gh | api | never

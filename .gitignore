@@ -1,0 +1,28 @@
+# local publishing credentials
+configs/local.yaml
+
+# models and data are never committed
+models/
+data/
+outputs/
+predictions/
+results/
+logs/
+logs_*.txt
+.cache/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# editors
+.idea/
+.vscode/
+.DS_Store

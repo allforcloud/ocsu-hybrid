@@ -1,0 +1,5 @@
+# Paper-aligned text metrics
+transformers>=4.45,<5
+nltk>=3.8
+rouge_score>=0.1.2
+# optional: pip install bert-score

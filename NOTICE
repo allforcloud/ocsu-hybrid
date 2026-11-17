@@ -1,0 +1,89 @@
+OCSU-Hybrid
+Copyright 2026 OCSU-Hybrid contributors
+
+This product includes software and data developed by third parties. The
+following notices are provided for attribution and license compliance. The
+Apache-2.0 license in LICENSE applies to the original code in this repository,
+not to the third-party components listed below.
+
+--------------------------------------------------------------------------------
+MolScribe (vendored under third_party/MolScribe)
+--------------------------------------------------------------------------------
+Copyright (c) 2022 Yujie Qian
+License: MIT
+Source: https://github.com/thomas0809/MolScribe
+The vendored copy contains compatibility patches for timm >= 1.0 and a lazy
+package entry point; the MIT license text is retained in
+third_party/MolScribe/LICENSE.
+
+The MolScribe checkpoint `swin_base_char_aux_1m680k.pth` is distributed by the
+same project under the MIT license and is downloaded separately from
+https://huggingface.co/yujieq/MolScribe.
+
+--------------------------------------------------------------------------------
+OpenNMT-py 2.2.0 (minimal package vendored under third_party/onmt)
+--------------------------------------------------------------------------------
+Copyright (c) 2017-Present OpenNMT
+License: MIT
+Source: https://github.com/OpenNMT/OpenNMT-py
+Only the modules required by MolScribe's transformer decoder are included. The
+`onmt/__init__.py` file is reduced so that the package does not import the
+discontinued torchtext-based input pipeline. The MIT license text is retained
+in third_party/onmt/LICENSE.md.
+
+--------------------------------------------------------------------------------
+SciBERT vocabulary (src/ocsu_hybrid/assets/scibert/vocab.txt)
+--------------------------------------------------------------------------------
+Copyright 2019 Allen Institute for Artificial Intelligence
+License: Apache-2.0
+Source: https://github.com/allenai/scibert
+Only the 223 KB uncased SciBERT vocabulary is included, for reproducing the
+OCSU paper's text tokenisation. The model weights are not included.
+
+--------------------------------------------------------------------------------
+OCSU functional-group dictionary (src/ocsu_hybrid/fg/fg_data.json)
+--------------------------------------------------------------------------------
+Copyright 2025 OCSU authors
+License: Apache-2.0
+Source: https://github.com/PharMolix/OpenBioMed (OCSU)
+The dictionary contains SMARTS and SMILES patterns used to build the 140-class
+functional-group label space.
+
+--------------------------------------------------------------------------------
+BioT5+ (downloaded separately)
+--------------------------------------------------------------------------------
+Copyright Qizhi Pei and contributors
+License: MIT
+Source: https://huggingface.co/QizhiPei/biot5-plus-base-chebi20
+The weights are not redistributed by this repository.
+
+--------------------------------------------------------------------------------
+OPSIN (downloaded separately)
+--------------------------------------------------------------------------------
+Copyright Daniel Lowe and contributors
+License: MIT (the CLI jar also bundles third-party dependencies under their own
+licenses)
+Source: https://github.com/dan2097/opsin
+The jar is not redistributed by this repository.
+
+--------------------------------------------------------------------------------
+Vis-CheBI20 (downloaded separately)
+--------------------------------------------------------------------------------
+Copyright 2025 OCSU authors
+License: Apache-2.0
+Source: https://huggingface.co/datasets/PharMolix/Vis-CheBI20
+The dataset is not redistributed by this repository. The example image
+`examples/vischebi20_000000.png` is one test image, included under the dataset's
+Apache-2.0 license for documentation and smoke testing.
+
+--------------------------------------------------------------------------------
+Other runtime dependencies
+--------------------------------------------------------------------------------
+- RDKit: BSD-3-Clause, https://github.com/rdkit/rdkit
+- PyTorch: BSD-style, https://github.com/pytorch/pytorch
+- timm: Apache-2.0, https://github.com/huggingface/pytorch-image-models
+- OpenCV: Apache-2.0, https://github.com/opencv/opencv
+- Hugging Face Transformers: Apache-2.0, https://github.com/huggingface/transformers
+- NLTK: Apache-2.0, https://github.com/nltk/nltk
+- rouge-score: Apache-2.0, https://github.com/google-research/google-research
+- BERTScore: MIT, https://github.com/Tiiiger/bert_score

@@ -1,0 +1,16 @@
+include README.md
+include LICENSE
+include NOTICE
+include pyproject.toml
+include configs/local.example.yaml
+
+recursive-include src/ocsu_hybrid/assets *
+recursive-include src/ocsu_hybrid/fg *.json
+recursive-include third_party/MolScribe *
+recursive-include third_party/onmt *
+recursive-include tools *.py
+recursive-include scripts *.py
+recursive-include docs *.md
+recursive-include examples *.png *.md
+recursive-include tests *.py
+recursive-include requirements *.txt

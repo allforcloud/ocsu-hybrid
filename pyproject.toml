@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ocsu-hybrid"
+version = "0.1.0"
+description = "Modular OCSU pipeline: MolScribe + ConvNeXt-T functional groups + PubChem IUPAC + BioT5+ descriptions"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "OCSU-Hybrid contributors"}]
+keywords = ["chemistry", "OCSR", "molecule", "SMILES", "IUPAC", "functional groups"]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Chemistry",
+]
+dependencies = [
+  "numpy>=1.24",
+  "pillow>=9.0",
+  "rdkit>=2022.9",
+  "huggingface_hub>=0.23",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+ocsr = [
+  "torch>=2.1",
+  "torchvision>=0.16",
+  "timm>=1.0",
+  "opencv-python-headless>=4.8",
+  "SmilesPE==0.0.3",
+]
+biot5 = [
+  "transformers>=4.45,<5",
+  "sentencepiece>=0.1.99",
+  "selfies>=2.0",
+  "accelerate>=0.26",
+]
+eval = [
+  "transformers>=4.45,<5",
+  "nltk>=3.8",
+  "rouge_score>=0.1.2",
+]
+bertscore = ["bert-score>=0.3.13"]
+all = [
+  "torch>=2.1",
+  "torchvision>=0.16",
+  "timm>=1.0",
+  "opencv-python-headless>=4.8",
+  "SmilesPE==0.0.3",
+  "transformers>=4.45,<5",
+  "sentencepiece>=0.1.99",
+  "selfies>=2.0",
+  "accelerate>=0.26",
+  "nltk>=3.8",
+  "rouge_score>=0.1.2",
+]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+ocsu = "ocsu_hybrid.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/allforcloud/ocsu-hybrid"
+Issues = "https://github.com/allforcloud/ocsu-hybrid/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ocsu_hybrid*"]
+
+[tool.setuptools.package-data]
+ocsu_hybrid = ["fg/fg_data.json", "assets/scibert/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
