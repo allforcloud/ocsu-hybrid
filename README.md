@@ -2,13 +2,15 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**A modular, runnable implementation of the OCSR-based route in
+OCSU-Hybrid is a modular, runnable implementation of the OCSR-based route in
 [OCSU: Optical Chemical Structure Understanding for Molecule-centric Scientific
-Discovery](https://arxiv.org/abs/2501.15415).**
+Discovery](https://arxiv.org/abs/2501.15415). It turns a 2D molecular structure
+image into SMILES, functional groups, an IUPAC name and an English description.
+The pipeline combines MolScribe, ConvNeXt-T, PubChem and BioT5+, uses public
+specialist models, and fits on a single 8 GB GPU.
 
-One molecule image goes in; SMILES, functional groups, an IUPAC name and an
-English description come out. The shipped pipeline uses public specialist models
-and fits on a single 8 GB GPU — no 7B vision-language model is required.
+**Hugging Face weights:** the functional-group head is published at
+[`allforcloud9527/ocsu-hybrid-fg-convnext-t`](https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t).
 
 ```
 image ──► MolScribe ──► SMILES ──┬──► PubChem ──────► IUPAC name
@@ -41,15 +43,13 @@ two routes and this project are compared side by side.
 **Reading the IUPAC row.** This project retrieves names from PubChem instead of
 generating them. On the 87.72% of test molecules where a record is found, BLEU-4
 is **99.01** and **91.20%** of names are character-identical to the ground truth;
-end-to-end, 80.0% of all 2,680 names are exact. The gap to Mol-VL-7B's 76.95 is
-**coverage**, not retrieval quality: the remaining 329 misses are dominated by
-OCSR errors (median predicted-vs-ground-truth Tanimoto 0.794).
+end-to-end, 80.0% of all 2,680 names are exact. The remaining 329 misses are
+dominated by OCSR errors (median predicted-vs-ground-truth Tanimoto 0.794).
 
 All four headline metrics (SMILES Acc_s, functional-group F1, IUPAC BLEU-4 and
 description BLEU-4) meet or beat the best OCSR-based column; functional groups
 beat both Mol-VL sizes, and IUPAC beats both OCSR-based columns. SMILES Tanimoto
-is 0.67 below DoubleCheck (92.03 vs 92.70). The one column this project does not
-beat is Mol-VL-7B's generated IUPAC score; see [Limitations](#limitations).
+is 0.67 below DoubleCheck (92.03 vs 92.70).
 
 ---
 
@@ -86,9 +86,7 @@ executed on one RTX 4060.
 
 ---
 
-## What is implemented, and what is not
-
-**Implemented**
+## What it does
 
 - MolScribe image → SMILES, vendored with compatibility patches.
 - ConvNeXt-T 140-class functional-group head, trained from Vis-CheBI20 captions.
@@ -97,18 +95,6 @@ executed on one RTX 4060.
 - BioT5+ description with RDKit canonicalisation before SELFIES.
 - Optional OPSIN name → structure verification.
 - Paper-aligned evaluation for all four tasks.
-
-**Not implemented**
-
-- **Mol-VL / OCSR-free route.** The released 7B model is not shipped. On 100 test
-  images it scored **0.00 Acc_s** for image → SMILES (Tanimoto 0.177) while
-  MolScribe scored 0.81 on the same subset. As an IUPAC fallback it produced
-  **0/329** structurally correct names. Details:
-  [`docs/negative_results.md`](docs/negative_results.md).
-- **MolSight backend.** Removed; MolScribe is the only OCSR backend.
-- **Fine-tuned OCSR weights.** Both MolScribe and MolSight fine-tuning collapsed
-  on the 25.9k training images; the public checkpoints are kept.
-- **Beam search for MolScribe.** The upstream decoder does not implement it.
 
 ---
 
@@ -150,7 +136,7 @@ pip install -e ".[all]"
 # MolScribe, BioT5+, OPSIN, NLTK data
 python scripts/download_models.py --all
 
-# Functional-group head (published on Hugging Face, not in git)
+# Functional-group head (hosted on Hugging Face)
 python scripts/download_models.py --fg \
   --fg-repo allforcloud9527/ocsu-hybrid-fg-convnext-t
 ```
@@ -309,32 +295,25 @@ precision/recall column swap in the paper, and the BioT5+ tokenizer artifact.
 
 ## Models and data
 
-| component | source | size | license | shipped in git |
+| component | source | size | license | distribution |
 |---|---|---|---:|---|
-| MolScribe checkpoint | [`yujieq/MolScribe`](https://huggingface.co/yujieq/MolScribe) | 1.1 GB | MIT | no |
-| BioT5+ | [`QizhiPei/biot5-plus-base-chebi20`](https://huggingface.co/QizhiPei/biot5-plus-base-chebi20) | 0.96 GB | MIT | no |
-| FG ConvNeXt-T head | [`allforcloud9527/ocsu-hybrid-fg-convnext-t`](https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t) | 107 MB | Apache-2.0 | no (HF) |
-| OPSIN 2.9.0 | [dan2097/opsin](https://github.com/dan2097/opsin) | 14 MB | MIT | no |
-| SciBERT vocabulary | [allenai/scibert](https://github.com/allenai/scibert) | 223 KB | Apache-2.0 | **yes** |
-| MolScribe source | [thomas0809/MolScribe](https://github.com/thomas0809/MolScribe) | 14 MB | MIT | **yes**, vendored |
-| OpenNMT-py 2.2.0 minimal | [OpenNMT/OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py) | 1 MB | MIT | **yes**, vendored |
-| Vis-CheBI20 | [`PharMolix/Vis-CheBI20`](https://huggingface.co/datasets/PharMolix/Vis-CheBI20) | 3,300 test images | Apache-2.0 | one example only |
+| MolScribe checkpoint | [`yujieq/MolScribe`](https://huggingface.co/yujieq/MolScribe) | 1.1 GB | MIT | Hugging Face |
+| BioT5+ | [`QizhiPei/biot5-plus-base-chebi20`](https://huggingface.co/QizhiPei/biot5-plus-base-chebi20) | 0.96 GB | MIT | Hugging Face |
+| FG ConvNeXt-T head | [`allforcloud9527/ocsu-hybrid-fg-convnext-t`](https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t) | 107 MB | Apache-2.0 | Hugging Face |
+| OPSIN 2.9.0 | [dan2097/opsin](https://github.com/dan2097/opsin) | 14 MB | MIT | download |
+| SciBERT vocabulary | [allenai/scibert](https://github.com/allenai/scibert) | 223 KB | Apache-2.0 | bundled |
+| MolScribe source | [thomas0809/MolScribe](https://github.com/thomas0809/MolScribe) | 14 MB | MIT | bundled (vendored) |
+| OpenNMT-py 2.2.0 minimal | [OpenNMT/OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py) | 1 MB | MIT | bundled (vendored) |
+| Vis-CheBI20 | [`PharMolix/Vis-CheBI20`](https://huggingface.co/datasets/PharMolix/Vis-CheBI20) | 3,300 test images | Apache-2.0 | download; one example bundled |
 
-The functional-group checkpoint is published at
-[`allforcloud9527/ocsu-hybrid-fg-convnext-t`](https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t)
-rather than committed. [`docs/fg_model_card.md`](docs/fg_model_card.md) is the
-model card. The training script is `scripts/train_fg_classifier.py`.
+The functional-group checkpoint is hosted on Hugging Face at
+[`allforcloud9527/ocsu-hybrid-fg-convnext-t`](https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t).
+[`docs/fg_model_card.md`](docs/fg_model_card.md) is the model card, and
+`scripts/train_fg_classifier.py` is the training script.
 
 If the head is unavailable, every command still runs with
 `--fg-backend dictionary`; the only difference is functional-group F1 (91.11
 instead of 99.07).
-
-To publish a new checkpoint under your own account:
-
-```bash
-python scripts/publish_fg_model.py --model /path/to/model.pt \
-  --repo your-name/ocsu-hybrid-fg-convnext-t
-```
 
 ### Documentation
 
@@ -342,7 +321,6 @@ python scripts/publish_fg_model.py --model /path/to/model.pt \
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | stage-by-stage design, data flow, failure behaviour, runtime |
 | [`docs/evaluation.md`](docs/evaluation.md) | metric definitions, paper evaluator reproduction, coverage vs conditional |
-| [`docs/negative_results.md`](docs/negative_results.md) | 7B, fine-tuning, beam-search and 2B experiments that were rejected |
 | [`docs/fg_model_card.md`](docs/fg_model_card.md) | Hugging Face model card for the functional-group head |
 
 ### Train the FG head yourself
@@ -357,72 +335,6 @@ python scripts/train_fg_classifier.py \
 
 This reproduces the 99.07 F1 checkpoint: ConvNeXt-T, 384², 140 classes, batch 32,
 12 epochs, about 30 minutes on an RTX 4060.
-
----
-
-## Publishing the FG head and the repository (optional)
-
-Credentials live in `configs/local.yaml`, which is **gitignored**. Use a Hugging
-Face write token for uploads. GitHub pushes use the local SSH key by default; a
-GitHub token is only needed if you want the script to create the repository
-through the API. `HF_TOKEN` and `GITHUB_TOKEN` environment variables override
-the file.
-
-```bash
-cp configs/local.example.yaml configs/local.yaml
-# edit configs/local.yaml with your usernames, tokens and repository names
-```
-
-The file has this shape:
-
-```yaml
-huggingface:
-  username: "your-hf-username"
-  token: "hf_..."                       # write token; may be empty after `hf auth login`
-  fg_repo: "your-hf-username/ocsu-hybrid-fg-convnext-t"
-
-github:
-  username: "your-github-username"
-  auth: "ssh"                           # ssh | token
-  token: ""                             # only for auth: token or API repo creation
-  repo: "your-github-username/ocsu-hybrid"
-  branch: "main"
-  private: false                        # public repository
-  create_repo: "auto"                   # auto | gh | api | never
-```
-
-`fg_repo` and `repo` accept either `owner/name` or a full browser/SSH URL; the
-scripts normalise them.
-
-### Upload the functional-group head
-
-```bash
-python scripts/publish_fg_model.py --dry-run
-python scripts/publish_fg_model.py \
-  --model /path/to/model.pt
-```
-
-The script creates the public HF model repository if needed and uploads
-`model.pt` plus the model card as `README.md`. Without `--model` it looks for
-`models/fg_classifier/model.pt`.
-
-### Create and push the GitHub repository
-
-```bash
-python scripts/publish_github.py --dry-run
-python scripts/publish_github.py
-```
-
-With `auth: ssh` the script checks the repository with `git ls-remote`, checks
-that `configs/local.yaml` is ignored and not tracked, commits the project, and
-pushes over SSH. It **never force-pushes**. If the repository does not exist, it
-uses `gh repo create` when the GitHub CLI is authenticated, otherwise the API
-when a token is configured, otherwise it stops and asks you to create an empty
-repository manually. The SSH key never appears in a URL.
-
-The repository URLs in this README and `pyproject.toml` point to the published
-locations. If you fork the project, update those URLs and the `fg_repo` field
-after publishing your own copies.
 
 ---
 
@@ -442,8 +354,6 @@ All paths can be overridden without editing code:
 | `BIOT5_PATH` | `<models>/biot5-plus-chebi20` |
 | `OCSU_OPSIN_JAR` | `<models>/opsin/opsin-cli.jar` |
 | `MOLSCRIBE_PY` | current Python interpreter |
-| `HF_TOKEN` | overrides `huggingface.token` in `configs/local.yaml` |
-| `GITHUB_TOKEN` | overrides `github.token` in `configs/local.yaml` |
 
 The MolScribe worker runs in the current interpreter by default. If you keep the
 OCSR stack in a separate environment, set `MOLSCRIBE_PY=/path/to/python` or pass
@@ -457,10 +367,8 @@ OCSR stack in a separate environment, set `MOLSCRIBE_PY=/path/to/python` or pass
    PubChem name. Retrieval is not the bottleneck: hit-only BLEU-4 is 99.01. The
    remaining 329 misses are mostly OCSR errors. Raising coverage requires a
    stronger OCSR, not a better lookup layer.
-2. **IUPAC is retrieval, not generation.** The project reports the honest
-   end-to-end score (65.98) rather than filling misses with generated names. A
-   7B fallback raises BLEU-4 to 77.40 but adds **0** structurally correct names;
-   that variant is documented, not shipped.
+2. **IUPAC is retrieval, not generation.** Every returned name is a PubChem
+   record; misses are left empty rather than guessed.
 3. **Functional-group labels come from the OCSU dictionary.** The head learns
    "image → dictionary group", not free-form chemical naming, and does not
    localise groups. Images from a different rendering pipeline may need domain
@@ -468,25 +376,8 @@ OCSR stack in a separate environment, set `MOLSCRIBE_PY=/path/to/python` or pass
 4. **Description inherits the BioT5+ tokenizer artifact.** Multi-digit numbers
    decode with spaces (`17-oxo` → `1 7 -oxo`). Outputs are scored as generated;
    no post-hoc cleanup is applied.
-5. **No Mol-VL / 7B / OCSR-free path is shipped.** It is described as the paper's
-   second route only. See [`docs/negative_results.md`](docs/negative_results.md).
-6. **BERTScore is optional and not directly comparable.** The paper does not
+5. **BERTScore is optional and not directly comparable.** The paper does not
    state whether it uses baseline rescaling.
-
----
-
-## Negative results (why some obvious routes are not shipped)
-
-| route | result | conclusion |
-|---|---|---|
-| Mol-VL-7B as OCSR | 0.00 Acc_s, 0.177 Tanimoto on 100 images (MolScribe on the same subset: 0.81 / 0.929) | cannot replace MolScribe |
-| Mol-VL-7B as IUPAC fallback | 0/329 names verify against the ground-truth structure; BLEU-4 77.40 is metric-only | not shipped |
-| MolScribe fine-tune on 25.9k images | validation `post_smiles` 0.254 in the first epoch | catastrophic forgetting |
-| MolSight fine-tune on 25.9k images | Acc_s 69.58 → 65.12, empty outputs 157 → 248 | catastrophic forgetting |
-| MolScribe beam search | decoder branch raises `IndexError`; upstream notes "not supported yet" | unavailable |
-| 2B VLM functional groups | 59.19 F1 vs 91.11 dictionary / 99.07 head | not competitive |
-
-Full analysis: [`docs/negative_results.md`](docs/negative_results.md).
 
 ---
 

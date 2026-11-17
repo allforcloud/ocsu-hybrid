@@ -47,9 +47,9 @@ no FG checkpoint and is useful for debugging.
 **PubChem retrieval instead of name generation.** Every returned IUPAC name is a
 database record. On the 87.72% of test molecules where the lookup succeeds,
 BLEU-4 is 99.01 and 91.20% of names are character-identical to the ground truth.
-A generative fallback can raise BLEU by producing plausible n-grams, but it did
-not produce a single structurally correct name on the 329 misses (see
-`negative_results.md`), so it is not shipped.
+A generative fallback can raise BLEU by producing plausible n-grams without
+adding structurally correct records, so the shipped pipeline returns only
+PubChem records and leaves misses empty.
 
 **BioT5+ with RDKit canonicalisation.** MolScribe occasionally emits explicit
 hydrogens and unusual ring closures; SELFIES built from those is out of

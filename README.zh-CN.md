@@ -4,7 +4,10 @@
 
 [English](README.md) | **简体中文**
 
-输入一张分子结构图，输出 SMILES、官能团、IUPAC 名称和英文描述。整条流水线只使用公开的专用模型，可在单张 8 GB 显卡上运行，不需要 7B 视觉语言模型。
+OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称和英文描述。它组合了 MolScribe、ConvNeXt-T、PubChem 与 BioT5+，只使用公开的专用模型，可在单张 8 GB 显卡上运行。
+
+**Hugging Face 权重：** 官能团分类头托管在
+[`allforcloud9527/ocsu-hybrid-fg-convnext-t`](https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t)。
 
 ```
 图像 ──► MolScribe ──► SMILES ──┬──► PubChem ──────► IUPAC 名称
@@ -32,9 +35,9 @@
 | 分子描述 | BLEU-4 | **46.83** | 44.64 | 45.56 | 40.26 | 46.14 |
 | 分子描述 | METEOR | **58.99** | 57.09 | 58.07 | — | 58.14 |
 
-**如何理解 IUPAC 这一行。** 本项目从 PubChem **检索**名称，而不是生成名称。在找到记录的 87.72% 测试分子上，BLEU-4 为 **99.01**，**91.20%** 的名称与 ground truth 逐字一致；按全部 2,680 条计算，端到端逐字一致率为 80.0%。与 Mol-VL-7B 的 76.95 相比，差距主要在 **覆盖率**，不在检索质量：剩余 329 条未命中样本以 OCSR 错误为主（预测 SMILES 与 GT 的 Tanimoto 中位数为 0.794）。
+**如何理解 IUPAC 这一行。** 本项目从 PubChem **检索**名称，而不是生成名称。在找到记录的 87.72% 测试分子上，BLEU-4 为 **99.01**，**91.20%** 的名称与 ground truth 逐字一致；按全部 2,680 条计算，端到端逐字一致率为 80.0%。剩余 329 条未命中样本以 OCSR 错误为主（预测 SMILES 与 GT 的 Tanimoto 中位数为 0.794）。
 
-四个头条指标（SMILES Acc_s、官能团 F1、IUPAC BLEU-4、描述 BLEU-4）均达到或超过论文最佳 OCSR-based 列；官能团超过两种规模的 Mol-VL，IUPAC 超过两列 OCSR-based。唯一没有超过的是 Mol-VL-7B 的生成式 IUPAC 分数；SMILES Tanimoto 比 DoubleCheck 低 0.67（92.03 vs 92.70）。详见[限制](#限制)。
+四个头条指标（SMILES Acc_s、官能团 F1、IUPAC BLEU-4、描述 BLEU-4）均达到或超过论文最佳 OCSR-based 列；官能团超过两种规模的 Mol-VL，IUPAC 超过两列 OCSR-based。SMILES Tanimoto 比 DoubleCheck 低 0.67（92.03 vs 92.70）。
 
 ---
 
@@ -69,9 +72,7 @@
 
 ---
 
-## 已实现与未实现
-
-**已实现**
+## 功能范围
 
 - MolScribe 图像 → SMILES，已 vendor 到仓库并包含兼容补丁。
 - ConvNeXt-T 140 类官能团分类头，使用 Vis-CheBI20 caption 训练。
@@ -79,13 +80,6 @@
 - BioT5+ 分子描述，输入 SELFIES 前先做 RDKit canonicalisation。
 - 可选 OPSIN 名称 → 结构校验。
 - 四个任务的论文口径评测。
-
-**未实现**
-
-- **Mol-VL / OCSR-free 路线。** 不随项目发布 7B 模型。在 100 张 test 图上，它的图像 → SMILES 为 **0.00 Acc_s**（Tanimoto 0.177），同子集 MolScribe 为 0.81。作为 IUPAC 兜底时，生成名称 **0/329** 结构正确。详见 [`docs/negative_results.md`](docs/negative_results.md)。
-- **MolSight 后端。** 已移除；MolScribe 是唯一 OCSR 后端。
-- **OCSR 微调权重。** MolScribe 和 MolSight 在 25.9k 训练图上的微调均崩溃；保留公开 checkpoint。
-- **MolScribe beam search。** 上游 decoder 未实现该分支。
 
 ---
 
@@ -124,7 +118,7 @@ pip install -e ".[all]"
 # MolScribe、BioT5+、OPSIN、NLTK 数据
 python scripts/download_models.py --all
 
-# 官能团头（发布在 Hugging Face，不提交到 git）
+# 官能团头（托管在 Hugging Face）
 python scripts/download_models.py --fg \
   --fg-repo allforcloud9527/ocsu-hybrid-fg-convnext-t
 ```
@@ -275,18 +269,18 @@ Description BL-4 46.83  R-2 47.96  R-L 55.89  METEOR 58.99
 
 ## 模型与数据
 
-| 组件 | 来源 | 大小 | 许可 | 是否提交到 git |
+| 组件 | 来源 | 大小 | 许可 | 获取方式 |
 |---|---|---|---:|---|
-| MolScribe checkpoint | [`yujieq/MolScribe`](https://huggingface.co/yujieq/MolScribe) | 1.1 GB | MIT | 否 |
-| BioT5+ | [`QizhiPei/biot5-plus-base-chebi20`](https://huggingface.co/QizhiPei/biot5-plus-base-chebi20) | 0.96 GB | MIT | 否 |
-| 官能团 ConvNeXt-T 头 | [`allforcloud9527/ocsu-hybrid-fg-convnext-t`](https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t) | 107 MB | Apache-2.0 | 否（HF） |
-| OPSIN 2.9.0 | [dan2097/opsin](https://github.com/dan2097/opsin) | 14 MB | MIT | 否 |
-| SciBERT 词表 | [allenai/scibert](https://github.com/allenai/scibert) | 223 KB | Apache-2.0 | **是** |
-| MolScribe 源码 | [thomas0809/MolScribe](https://github.com/thomas0809/MolScribe) | 14 MB | MIT | **是**，已 vendor |
-| OpenNMT-py 2.2.0 最小包 | [OpenNMT/OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py) | 1 MB | MIT | **是**，已 vendor |
-| Vis-CheBI20 | [`PharMolix/Vis-CheBI20`](https://huggingface.co/datasets/PharMolix/Vis-CheBI20) | 3,300 张 test 图 | Apache-2.0 | 仅一张示例图 |
+| MolScribe checkpoint | [`yujieq/MolScribe`](https://huggingface.co/yujieq/MolScribe) | 1.1 GB | MIT | Hugging Face 下载 |
+| BioT5+ | [`QizhiPei/biot5-plus-base-chebi20`](https://huggingface.co/QizhiPei/biot5-plus-base-chebi20) | 0.96 GB | MIT | Hugging Face 下载 |
+| 官能团 ConvNeXt-T 头 | [`allforcloud9527/ocsu-hybrid-fg-convnext-t`](https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t) | 107 MB | Apache-2.0 | Hugging Face 下载 |
+| OPSIN 2.9.0 | [dan2097/opsin](https://github.com/dan2097/opsin) | 14 MB | MIT | 下载 |
+| SciBERT 词表 | [allenai/scibert](https://github.com/allenai/scibert) | 223 KB | Apache-2.0 | 内置 |
+| MolScribe 源码 | [thomas0809/MolScribe](https://github.com/thomas0809/MolScribe) | 14 MB | MIT | 内置（vendored） |
+| OpenNMT-py 2.2.0 最小包 | [OpenNMT/OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py) | 1 MB | MIT | 内置（vendored） |
+| Vis-CheBI20 | [`PharMolix/Vis-CheBI20`](https://huggingface.co/datasets/PharMolix/Vis-CheBI20) | 3,300 张 test 图 | Apache-2.0 | 单独下载；内置一张示例图 |
 
-官能团 checkpoint 发布在 Hugging Face，不提交到仓库。模型卡为 [`docs/fg_model_card.md`](docs/fg_model_card.md)，训练脚本为 `scripts/train_fg_classifier.py`。
+官能团 checkpoint 托管在 Hugging Face。模型卡为 [`docs/fg_model_card.md`](docs/fg_model_card.md)，训练脚本为 `scripts/train_fg_classifier.py`。
 
 ### 自己训练官能团头
 
@@ -306,62 +300,7 @@ python scripts/train_fg_classifier.py \
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | 各阶段设计、数据流、失败行为、运行时 |
 | [`docs/evaluation.md`](docs/evaluation.md) | 指标定义、论文 evaluator 复现、覆盖率与条件分 |
-| [`docs/negative_results.md`](docs/negative_results.md) | 被否决的 7B、微调、beam search、2B 实验 |
 | [`docs/fg_model_card.md`](docs/fg_model_card.md) | 官能团头的 Hugging Face 模型卡 |
-
----
-
-## 发布官能团头与 GitHub 仓库（可选）
-
-凭据放在 `configs/local.yaml`，该文件已被 **gitignore**。Hugging Face 使用 write token；GitHub 默认使用本地 SSH key 推送，只有需要脚本自动创建仓库时才需要 GitHub token。`HF_TOKEN`、`GITHUB_TOKEN` 环境变量会覆盖文件中的值。
-
-```bash
-cp configs/local.example.yaml configs/local.yaml
-# 填写用户名、token 和仓库名
-```
-
-配置格式：
-
-```yaml
-huggingface:
-  username: "your-hf-username"
-  token: "hf_..."                       # write token；`hf auth login` 后可为空
-  fg_repo: "your-hf-username/ocsu-hybrid-fg-convnext-t"
-
-github:
-  username: "your-github-username"
-  auth: "ssh"                           # ssh | token
-  token: ""                             # 仅 auth: token 或 API 建仓时需要
-  repo: "your-github-username/ocsu-hybrid"
-  branch: "main"
-  private: false                        # 公开仓库
-  create_repo: "auto"                   # auto | gh | api | never
-```
-
-`fg_repo` 与 `repo` 既可以是 `owner/name`，也可以是完整浏览器/SSH URL，脚本会自动规范化。
-
-上传官能团头：
-
-```bash
-python scripts/publish_fg_model.py --dry-run
-python scripts/publish_fg_model.py --model /path/to/model.pt
-```
-
-脚本会按需创建公开 HF 模型仓库，上传 `model.pt` 与模型卡 `README.md`。不传 `--model` 时默认读取 `models/fg_classifier/model.pt`。
-
-创建并推送 GitHub 仓库：
-
-```bash
-python scripts/publish_github.py --dry-run
-python scripts/publish_github.py
-```
-
-`auth: ssh` 时，脚本用 `git ls-remote` 检查仓库，确认 `configs/local.yaml` 已被忽略且未跟踪，提交项目并通过 SSH 推送。**不会 force push**。仓库不存在时，会优先用已登录的 `gh repo create`，其次用配置的 token 调 API，否则停止并提示手动创建空仓库。SSH key 不会出现在 URL 中。
-
-本仓库已发布地址：
-
-- GitHub：https://github.com/allforcloud/ocsu-hybrid
-- Hugging Face：https://huggingface.co/allforcloud9527/ocsu-hybrid-fg-convnext-t
 
 ---
 
@@ -381,8 +320,6 @@ python scripts/publish_github.py
 | `BIOT5_PATH` | `<models>/biot5-plus-chebi20` |
 | `OCSU_OPSIN_JAR` | `<models>/opsin/opsin-cli.jar` |
 | `MOLSCRIBE_PY` | 当前 Python 解释器 |
-| `HF_TOKEN` | 覆盖 `configs/local.yaml` 中的 `huggingface.token` |
-| `GITHUB_TOKEN` | 覆盖 `configs/local.yaml` 中的 `github.token` |
 
 默认情况下，MolScribe worker 使用当前 Python 解释器。如果 OCSR 栈在独立环境，可设置 `MOLSCRIBE_PY=/path/to/python` 或传入 `--molscribe-python`。
 
@@ -391,26 +328,10 @@ python scripts/publish_github.py
 ## 限制
 
 1. **IUPAC 覆盖率受 OCSR 限制。** 87.72% 的测试分子能拿到 PubChem 名称。检索不是瓶颈：命中时 BLEU-4 为 99.01。剩余 329 条未命中主要是 OCSR 错误；提升覆盖率需要更强的 OCSR，而不是更好的查询层。
-2. **IUPAC 是检索，不是生成。** 项目报告诚实的端到端分数（65.98），没有用生成名称填补未命中。7B 兜底可把 BLEU-4 抬到 77.40，但新增结构正确名称为 **0**；该变体只记录在文档中，不随项目发布。
+2. **IUPAC 是检索，不是生成。** 每个返回的名称都是 PubChem 记录；未命中时保留为空，不做猜测。
 3. **官能团标签来自 OCSU 字典。** 分类头学习的是“图像 → 字典中的官能团”，不是自由化学命名，也不做官能团定位。不同渲染管线的图像可能需要域适应。
 4. **分子描述继承 BioT5+ tokenizer artifact。** 多位数字会被拆开解码（`17-oxo` → `1 7 -oxo`）。输出按原样评分，不做后处理。
-5. **不包含 Mol-VL / 7B / OCSR-free 路径。** 它只作为论文第二条路线在文档中说明。
-6. **BERTScore 可选，且不可直接比较。** 论文未说明是否使用 baseline rescaling。
-
----
-
-## 负结果（为什么这些路线没有进入项目）
-
-| 路线 | 结果 | 结论 |
-|---|---|---|
-| Mol-VL-7B 作为 OCSR | 100 张图上 0.00 Acc_s、0.177 Tanimoto（同子集 MolScribe：0.81 / 0.929） | 不能替代 MolScribe |
-| Mol-VL-7B 作为 IUPAC 兜底 | 0/329 名称通过 OPSIN 结构校验；BLEU-4 77.40 只是指标虚高 | 不发布 |
-| MolScribe 在 25.9k 图上微调 | 第一个 epoch 验证集 `post_smiles` 0.254 | 灾难性遗忘 |
-| MolSight 在 25.9k 图上微调 | Acc_s 69.58 → 65.12，空输出 157 → 248 | 灾难性遗忘 |
-| MolScribe beam search | decoder 分支抛 `IndexError`；上游注明 "not supported yet" | 不可用 |
-| 2B VLM 官能团 | 59.19 F1，对比字典 91.11 / 分类头 99.07 | 无竞争力 |
-
-完整分析见 [`docs/negative_results.md`](docs/negative_results.md)。
+5. **BERTScore 可选，且不可直接比较。** 论文未说明是否使用 baseline rescaling。
 
 ---
 
