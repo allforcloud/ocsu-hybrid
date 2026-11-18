@@ -32,6 +32,34 @@ OCSU-Hybrid 是一个开源、可复现的模块化流水线，目标很直接�
 
 四个阶段彼此独立，可以单独替换、单独调试，也可以只跑其中一部分。
 
+### 一个例子
+
+![octan-3-ol](../../examples/octan-3-ol.png)
+
+对这张 octan-3-ol 结构图，当前 TTA pipeline 输出：
+
+| 输出 | 结果 |
+|---|---|
+| SMILES | `CCCCCC(O)CC` |
+| 官能团 | `alcohol groups`、`side-chain hydroxyls` |
+| IUPAC | `octan-3-ol` |
+| 描述 | The molecule is a secondary alcohol that is octane substituted by a hydroxy group at position 3. It has a role as a volatile oil component, a pheromone and a plant metabolite. |
+
+对应的 Python API 返回：
+
+```json
+{
+  "smiles": "CCCCCC(O)CC",
+  "functional_groups": ["alcohol groups", "side-chain hydroxyls"],
+  "iupac": {"name": "octan-3-ol"},
+  "description": {
+    "text": "The molecule is a secondary alcohol that is octane substituted by a hydroxy group at position 3."
+  }
+}
+```
+
+> 示例图来自 Vis-CheBi20（Apache-2.0）；表格中的描述保留前两句，JSON 中为第一句。这四个字段就是 `Pipeline.analyze()` 的返回结构。
+
 ---
 
 ## 二、为什么选择模块化路线？
