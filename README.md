@@ -27,33 +27,60 @@ image ──► MolScribe ──► SMILES ──┬──► PubChem ───�
 ## Results
 
 Full Vis-CheBI20 test split, same metric definitions as the paper. The paper's
-two routes and this project are compared side by side.
+two routes and the three project versions are compared side by side.
 
-| task | metric | **OCSU-Hybrid** | OCSR-based: MolScribe | OCSR-based: DoubleCheck | OCSR-free: Mol-VL-2B | OCSR-free: Mol-VL-7B |
-|---|---|---:|---:|---:|---:|---:|
-| SMILES | Acc_s | **85.42** | 80.50 | 82.40 | — | — |
-| SMILES | Acc_c | **82.07** | 75.10 | 77.60 | — | — |
-| SMILES | Tanimoto | **94.28** | 90.80 | 92.70 | — | — |
-| functional groups | F1 | **99.07** | 89.60 | 93.63 | 95.40 | 97.32 |
-| IUPAC | BLEU-4 | **72.01** | 61.03 | 64.23 | 72.79 | **76.95** |
-| IUPAC | ROUGE-1 | **88.50** | 82.73 | 84.45 | — | 81.88 |
-| description | BLEU-4 | **48.26** | 44.64 | 45.56 | 40.26 | 46.14 |
-| description | METEOR | **60.39** | 57.09 | 58.07 | — | 58.14 |
+| task | metric | Baseline (FG FT) | TTA (3-view) | TTA + synonym | Paper MolScribe | Paper DoubleCheck | Paper Mol-VL-2B | Paper Mol-VL-7B |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| SMILES | Acc_s | 84.00 | 85.42 | **85.42** | 80.50 | 82.40 | — | — |
+| SMILES | Acc_c | 80.55 | 82.07 | **82.07** | 75.10 | 77.60 | — | — |
+| SMILES | Tanimoto | 92.03 | 94.28 | **94.28** | 90.80 | 92.70 | — | — |
+| functional groups | F1 | **99.07** | **99.07** | **99.07** | 89.60 | 93.63 | 95.40 | 97.32 |
+| IUPAC | BLEU-4 | 65.98 | 71.97 | **72.01** | 61.03 | 64.23 | 72.79 | **76.95** |
+| IUPAC | ROUGE-1 | 85.39 | 88.44 | **88.50** | 82.73 | 84.45 | — | 81.88 |
+| description | BLEU-4 | 46.83 | 48.26 | **48.26** | 44.64 | 45.56 | 40.26 | 46.14 |
+| description | METEOR | 58.99 | 60.39 | **60.39** | 57.09 | 58.07 | — | 58.14 |
 
 **Reading the IUPAC row.** This project retrieves names from PubChem instead of
-generating them. MolScribe runs with three deterministic views (`base`, 8% pad,
-+3° rotation); the image-only FG head picks the most consistent view, and the
-base result is kept when it is already valid. If the selected view has no
-PubChem record, the other views are tried before giving up. Names are then
-switched to a dataset-style PubChem synonym when one exists for the same
-InChIKey. On the 90.56% of test molecules where a record is found, BLEU-4 is
-**99.09** and **92.21%** of names are character-identical to the ground truth;
+generating them. On the 90.56% of test molecules where a record is found, BLEU-4
+is **99.09** and **92.21%** of names are character-identical to the ground truth;
 end-to-end, 83.5% of all 2,680 names are exact.
 
-All four headline metrics (SMILES Acc_s, functional-group F1, IUPAC BLEU-4 and
-description BLEU-4) meet or beat the best OCSR-based column. Functional groups
-beat both Mol-VL sizes, IUPAC beats both OCSR-based columns, and SMILES Acc_s,
-Acc_c and Tanimoto also exceed both paper OCSR columns.
+Every project version meets or beats the best OCSR-based column on all four
+headline metrics; the TTA columns also exceed both paper OCSR columns on SMILES
+Acc_s, Acc_c and Tanimoto. Functional groups beat both Mol-VL sizes and IUPAC
+beats both OCSR-based columns.
+
+Baseline trains only the 27.8 M functional-group head and uses single-view
+MolScribe. TTA runs three deterministic views (`base`, 8% pad, +3° rotation);
+the image-only FG head selects the most consistent view, and the other views
+are tried when the selected one has no PubChem record. TTA + synonym adds
+synonym-gated name normalization. The OCSR stage alone reaches Acc_s **86.70**;
+the final pipeline reports 85.42 because the name-consistency fallback can
+switch a small number of structures to a view with a PubChem record.
+
+Current benchmark: `4b039ae` (2026-11-18).
+
+### Version history
+
+| version | commit | date | type | SMILES Acc_s | Acc_c | Tanimoto | IUPAC coverage | IUPAC exact | BLEU-4 | description BLEU-4 |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Baseline (FG FT) | `efa7f3f` | 2026-11-17 | baseline | 84.00 | 80.55 | 92.03 | 87.72% | 80.00% (2,144) | 65.98 | 46.83 |
+| TTA (MolScribe 3-view) | `6094586` | 2026-11-18 | major | 85.42 | 82.07 | 94.28 | 90.56% | 82.54% (2,212) | 71.97 | 48.26 |
+| TTA + synonym | `4b039ae` | 2026-11-18 | minor | 85.42 | 82.07 | 94.28 | 90.56% | **83.51%** (2,238) | **72.01** | 48.26 |
+
+| comparison | Δ Acc_s | Δ exact | Δ BLEU-4 | Δ description |
+|---|---:|---:|---:|---:|
+| TTA vs Baseline | +1.42 | +2.54 | +5.99 | +1.43 |
+| Synonym vs TTA | 0 | +0.97 | +0.04 | 0 |
+| Synonym vs Baseline | +1.42 | +3.51 | +6.03 | +1.43 |
+
+The MolScribe three-view adjustment is the TTA row (`6094586`); the second
+2026-11-18 commit (`4b039ae`) is synonym normalization, not OCSR fine-tuning.
+FG F1 is 99.07 in all three versions.
+
+To reproduce the rows: Baseline omits `--molscribe-views` and uses
+`--no-normalize-iupac`; TTA adds the views and uses `--no-normalize-iupac`;
+TTA + synonym uses the command under "Reproducing the reported numbers".
 
 ---
 
@@ -64,7 +91,7 @@ Acc_c and Tanimoto also exceed both paper OCSR columns.
 | Core idea | `P(T\|I) = P(S\|I) · P(T\|S)`: recognise the structure, then understand it | a single VLM learns `P(T\|I)` end to end | OCSR-based, with an image-only functional-group head |
 | Image → SMILES | DoubleCheck or MolScribe | Mol-VL generates SMILES directly | **MolScribe** public checkpoint, multi-view TTA |
 | Functional groups | RDKit + OCSU dictionary | Mol-VL generates | **ConvNeXt-T image head** (default); dictionary fallback |
-| IUPAC | PubChem retrieval | Mol-VL generates | **PubChem retrieval** |
+| IUPAC | PubChem retrieval | Mol-VL generates | **PubChem retrieval**, synonym-gated name normalization |
 | Description | BioT5+ | Mol-VL generates | **BioT5+**, SMILES canonicalised first |
 | Name grounding | database record | none | **database record** |
 | Training | OCSR trained separately (DoubleCheck 4×A100×4 days; MolScribe 4×A100×1 day); downstream modules not trained | 4×A100×10 days, 50 epochs, full-parameter SFT | **only the 27.8 M FG head**, about 30 minutes on an RTX 4060; OCSR and BioT5+ use public weights |

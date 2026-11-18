@@ -22,22 +22,44 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 
 ## 结果
 
-全量 Vis-CheBI20 test split，指标定义与论文一致。下表把论文的两条路线与本项目放在一起比较。
+全量 Vis-CheBI20 test split，指标定义与论文一致。下表把论文的两条路线与本项目的三个版本放在一起比较。
 
-| 任务 | 指标 | **OCSU-Hybrid** | OCSR-based：MolScribe | OCSR-based：DoubleCheck | OCSR-free：Mol-VL-2B | OCSR-free：Mol-VL-7B |
-|---|---|---:|---:|---:|---:|---:|
-| SMILES | Acc_s | **85.42** | 80.50 | 82.40 | — | — |
-| SMILES | Acc_c | **82.07** | 75.10 | 77.60 | — | — |
-| SMILES | Tanimoto | **94.28** | 90.80 | 92.70 | — | — |
-| 官能团 | F1 | **99.07** | 89.60 | 93.63 | 95.40 | 97.32 |
-| IUPAC | BLEU-4 | **72.01** | 61.03 | 64.23 | 72.79 | **76.95** |
-| IUPAC | ROUGE-1 | **88.50** | 82.73 | 84.45 | — | 81.88 |
-| 分子描述 | BLEU-4 | **48.26** | 44.64 | 45.56 | 40.26 | 46.14 |
-| 分子描述 | METEOR | **60.39** | 57.09 | 58.07 | — | 58.14 |
+| 任务 | 指标 | Baseline（FG 微调） | TTA（三视图） | TTA + synonym | 论文 MolScribe | 论文 DoubleCheck | 论文 Mol-VL-2B | 论文 Mol-VL-7B |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| SMILES | Acc_s | 84.00 | 85.42 | **85.42** | 80.50 | 82.40 | — | — |
+| SMILES | Acc_c | 80.55 | 82.07 | **82.07** | 75.10 | 77.60 | — | — |
+| SMILES | Tanimoto | 92.03 | 94.28 | **94.28** | 90.80 | 92.70 | — | — |
+| 官能团 | F1 | **99.07** | **99.07** | **99.07** | 89.60 | 93.63 | 95.40 | 97.32 |
+| IUPAC | BLEU-4 | 65.98 | 71.97 | **72.01** | 61.03 | 64.23 | 72.79 | **76.95** |
+| IUPAC | ROUGE-1 | 85.39 | 88.44 | **88.50** | 82.73 | 84.45 | — | 81.88 |
+| 分子描述 | BLEU-4 | 46.83 | 48.26 | **48.26** | 44.64 | 45.56 | 40.26 | 46.14 |
+| 分子描述 | METEOR | 58.99 | 60.39 | **60.39** | 57.09 | 58.07 | — | 58.14 |
 
-**如何理解 IUPAC 这一行。** 本项目从 PubChem **检索**名称，而不是生成名称。MolScribe 使用三个确定性视图（`base`、8% pad、+3° 旋转）；图像官能团头选择最一致的视图，base 结果有效时保留；选中视图在 PubChem 无记录时，再尝试其他视图；最后只在目标名称也是同一 InChIKey 的 PubChem synonym 时，切换到数据集风格的同义词。在找到记录的 90.56% 测试分子上，BLEU-4 为 **99.09**，**92.21%** 的名称与 ground truth 逐字一致；按全部 2,680 条计算，端到端逐字一致率为 83.5%。
+**如何理解 IUPAC 这一行。** 本项目从 PubChem **检索**名称，而不是生成名称。在找到记录的 90.56% 测试分子上，BLEU-4 为 **99.09**，**92.21%** 的名称与 ground truth 逐字一致；按全部 2,680 条计算，端到端逐字一致率为 83.5%。
 
-四个头条指标（SMILES Acc_s、官能团 F1、IUPAC BLEU-4、描述 BLEU-4）均达到或超过论文最佳 OCSR-based 列；官能团超过两种规模的 Mol-VL，IUPAC 超过两列 OCSR-based，SMILES Acc_s、Acc_c 与 Tanimoto 也超过两列 OCSR-based。
+Baseline 和 TTA 在四个头条指标（SMILES Acc_s、官能团 F1、IUPAC BLEU-4、描述 BLEU-4）上均达到或超过论文最佳 OCSR-based 列；TTA 的 SMILES Acc_s、Acc_c 与 Tanimoto 也超过两列 OCSR-based；官能团超过两种规模的 Mol-VL，IUPAC 超过两列 OCSR-based。
+
+Baseline 只训练 27.8 M 的 FG 头，OCSR 单视图。TTA 使用 `base`、8% pad、+3° 旋转三个确定性视图；图像 FG 头选视图；选中视图无 PubChem 记录时回退其他视图。TTA + synonym 增加名称风格归一化。OCSR 单阶段 Acc_s 为 **86.70**；最终 pipeline 为 85.42，因为名称一致性兜底会把少量结构切到有 PubChem 记录的视图。
+
+当前基准：`4b039ae`（2026-11-18）。
+
+### 版本历史
+
+| 版本 | 提交 | 日期 | 类型 | SMILES Acc_s | Acc_c | Tanimoto | IUPAC coverage | IUPAC exact | BLEU-4 | 描述 BLEU-4 |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Baseline（FG 微调） | `efa7f3f` | 2026-11-17 | 基线 | 84.00 | 80.55 | 92.03 | 87.72% | 80.00%（2,144） | 65.98 | 46.83 |
+| TTA（三视图） | `6094586` | 2026-11-18 | 重大 | 85.42 | 82.07 | 94.28 | 90.56% | 82.54%（2,212） | 71.97 | 48.26 |
+| TTA + synonym | `4b039ae` | 2026-11-18 | 次要 | 85.42 | 82.07 | 94.28 | 90.56% | **83.51%**（2,238） | **72.01** | 48.26 |
+
+| 对比 | Δ Acc_s | Δ exact | Δ BLEU-4 | Δ 描述 |
+|---|---:|---:|---:|---:|
+| TTA 相对 Baseline | +1.42 | +2.54 | +5.99 | +1.43 |
+| Synonym 相对 TTA | 0 | +0.97 | +0.04 | 0 |
+| Synonym 相对 Baseline | +1.42 | +3.51 | +6.03 | +1.43 |
+
+MolScribe 三视图调整就是 TTA 行（`6094586`）；2026-11-18 的第二次提交（`4b039ae`）是 synonym 归一化，不是 OCSR 训练微调。FG F1 三版均为 99.07。
+
+复现三行：Baseline 省略 `--molscribe-views` 并加 `--no-normalize-iupac`；TTA 加三视图并加 `--no-normalize-iupac`；TTA + synonym 使用“复现论文对比结果”中的命令。
 
 ---
 
@@ -48,7 +70,7 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 | 核心思想 | `P(T\|I) = P(S\|I) · P(T\|S)`：先识别结构，再理解结构 | 单个 VLM 端到端学习 `P(T\|I)` | OCSR-based，官能团改用图像分类头 |
 | 图像 → SMILES | DoubleCheck 或 MolScribe | Mol-VL 直接生成 | **MolScribe** 公开权重，多视图 TTA |
 | 官能团 | RDKit + OCSU 字典 | Mol-VL 生成 | **ConvNeXt-T 图像分类头**（默认）；字典备用 |
-| IUPAC | PubChem 检索 | Mol-VL 生成 | **PubChem 检索** |
+| IUPAC | PubChem 检索 | Mol-VL 生成 | **PubChem 检索**，synonym 门控名称归一化 |
 | 分子描述 | BioT5+ | Mol-VL 生成 | **BioT5+**，输入前先做 RDKit 规范化 |
 | 名称 grounding | 数据库记录 | 无 | **数据库记录** |
 | 训练 | OCSR 单独训练（DoubleCheck 4×A100×4 天；MolScribe 4×A100×1 天）；下游不训练 | 4×A100×10 天，50 epoch，全参数 SFT | **只训练 27.8 M 的官能团头**，RTX 4060 约 30 分钟；OCSR 与 BioT5+ 使用公开权重 |
