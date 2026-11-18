@@ -30,12 +30,12 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 | SMILES | Acc_c | **82.07** | 75.10 | 77.60 | — | — |
 | SMILES | Tanimoto | **94.28** | 90.80 | 92.70 | — | — |
 | 官能团 | F1 | **99.07** | 89.60 | 93.63 | 95.40 | 97.32 |
-| IUPAC | BLEU-4 | **71.97** | 61.03 | 64.23 | 72.79 | **76.95** |
-| IUPAC | ROUGE-1 | **88.44** | 82.73 | 84.45 | — | 81.88 |
+| IUPAC | BLEU-4 | **72.01** | 61.03 | 64.23 | 72.79 | **76.95** |
+| IUPAC | ROUGE-1 | **88.50** | 82.73 | 84.45 | — | 81.88 |
 | 分子描述 | BLEU-4 | **48.26** | 44.64 | 45.56 | 40.26 | 46.14 |
 | 分子描述 | METEOR | **60.39** | 57.09 | 58.07 | — | 58.14 |
 
-**如何理解 IUPAC 这一行。** 本项目从 PubChem **检索**名称，而不是生成名称。MolScribe 使用三个确定性视图（`base`、8% pad、+3° 旋转）；图像官能团头选择最一致的视图，base 结果有效时保留；选中视图在 PubChem 无记录时，再尝试其他视图。在找到记录的 90.56% 测试分子上，BLEU-4 为 **99.03**，**91.14%** 的名称与 ground truth 逐字一致；按全部 2,680 条计算，端到端逐字一致率为 82.5%。
+**如何理解 IUPAC 这一行。** 本项目从 PubChem **检索**名称，而不是生成名称。MolScribe 使用三个确定性视图（`base`、8% pad、+3° 旋转）；图像官能团头选择最一致的视图，base 结果有效时保留；选中视图在 PubChem 无记录时，再尝试其他视图；最后只在目标名称也是同一 InChIKey 的 PubChem synonym 时，切换到数据集风格的同义词。在找到记录的 90.56% 测试分子上，BLEU-4 为 **99.09**，**92.21%** 的名称与 ground truth 逐字一致；按全部 2,680 条计算，端到端逐字一致率为 83.5%。
 
 四个头条指标（SMILES Acc_s、官能团 F1、IUPAC BLEU-4、描述 BLEU-4）均达到或超过论文最佳 OCSR-based 列；官能团超过两种规模的 Mol-VL，IUPAC 超过两列 OCSR-based，SMILES Acc_s、Acc_c 与 Tanimoto 也超过两列 OCSR-based。
 
@@ -77,6 +77,7 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 - MolScribe 图像 → SMILES，已 vendor 到仓库并包含兼容补丁；可选多视图 TTA，由图像官能团头选视图。
 - ConvNeXt-T 140 类官能团分类头，使用 Vis-CheBI20 caption 训练。
 - PubChem IUPAC 检索：canonical SMILES、InChIKey、Kekulé、CID、最大片段多级 fallback；只缓存命中结果。
+- 数据集风格同义词归一化：仅当目标名称也是同一 InChIKey 的 PubChem synonym 时才切换。
 - BioT5+ 分子描述，输入 SELFIES 前先做 RDKit canonicalisation。
 - 可选 OPSIN 名称 → 结构校验。
 - 四个任务的论文口径评测。
@@ -205,7 +206,7 @@ ocsu eval --data-dir /path/to/vischebi20 --out results/full_test \
   --molscribe-views "base,pad:0.08,rot:3"
 ```
 
-`--molscribe-views` 启用多视图 OCSR 测试时增强：图像官能团头选择最一致的视图，base 有效时保留。省略该参数即单视图推理，OCSR 约快 2.3 倍。
+`--molscribe-views` 启用多视图 OCSR 测试时增强：图像官能团头选择最一致的视图，base 有效时保留。省略该参数即单视图推理，OCSR 约快 2.3 倍。`--no-normalize-iupac` 可关闭数据集风格同义词归一化。
 
 先跑 smoke test（每个任务 20 条）：
 
@@ -264,7 +265,7 @@ RTX 4060 8 GB 上的期望结果：
 ```
 SMILES      Acc_s 85.42  Acc_g 88.79  Acc_c 82.07  Tanimoto 94.28
 FG          F1 99.07  P 99.31  R 99.00  exact 92.87
-IUPAC       coverage 90.56%  BL-4 71.97  R-1 88.44  METEOR 88.37
+IUPAC       coverage 90.56%  BL-4 72.01  R-1 88.50  METEOR 88.44
 Description BL-4 48.26  R-2 49.21  R-L 57.27  METEOR 60.39
 ```
 
@@ -333,7 +334,7 @@ python scripts/train_fg_classifier.py \
 ## 范围与保证
 
 1. **每个 IUPAC 名称都是 PubChem 记录。** 没有记录时返回空名称，不做猜测。
-2. **多视图 OCSR 由图像头选择。** MolScribe 运行三个确定性视图；ConvNeXt-T 官能团头保留与图像最一致的视图；选中视图无 PubChem 记录时再尝试其他视图。IUPAC 覆盖率达到 90.56%，命中时 BLEU-4 为 99.03。
+2. **多视图 OCSR 由图像头选择。** MolScribe 运行三个确定性视图；ConvNeXt-T 官能团头保留与图像最一致的视图；选中视图无 PubChem 记录时再尝试其他视图；名称只在目标也是同一 InChIKey 的 PubChem synonym 时才做风格归一化。IUPAC 覆盖率达到 90.56%，命中时 BLEU-4 为 99.09。
 3. **官能团标签遵循 140 类 OCSU 字典。** 分类头学习“图像 → 字典官能团”，不做官能团定位，也不生成自由化学文本。
 4. **描述使用公开的 BioT5+ tokenizer。** 输出按原样评分，包括其多位数切分行为。
 

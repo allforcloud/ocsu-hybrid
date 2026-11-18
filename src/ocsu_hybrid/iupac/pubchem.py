@@ -44,6 +44,7 @@ class PubChemResolver:
         self.sleep_s = sleep_s
         self.user_agent = user_agent
         self._cache: Optional[dict] = None
+        self._synonyms: dict[str, List[str]] = {}
         self._lock = threading.RLock()
 
     # ------------------------------------------------------------------ cache
@@ -209,6 +210,26 @@ class PubChemResolver:
             self._save_cache(canonical, name, source)
         time.sleep(self.sleep_s)
         return name, source
+
+    def synonyms(self, inchikey: str) -> List[str]:
+        """All PubChem synonyms for ``inchikey`` (cached per resolver)."""
+        if not inchikey:
+            return []
+        with self._lock:
+            if inchikey in self._synonyms:
+                return list(self._synonyms[inchikey])
+        url = (f"{PUG}/compound/inchikey/{urllib.parse.quote(inchikey, safe='')}"
+               f"/synonyms/JSON")
+        data = self._get_json(url)
+        names: List[str] = []
+        try:
+            names = list(data["InformationList"]["Information"][0].get("Synonym", []))
+        except Exception:
+            names = []
+        with self._lock:
+            self._synonyms[inchikey] = names
+        time.sleep(self.sleep_s)
+        return list(names)
 
     def resolve_many(self, smiles: Sequence[Optional[str]], workers: int = 4
                      ) -> List[Tuple[Optional[str], Optional[str]]]:

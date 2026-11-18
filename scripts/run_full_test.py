@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--iupac-cache", default=None)
     ap.add_argument("--biot5-path", default=None)
     ap.add_argument("--no-description", action="store_true")
+    ap.add_argument("--no-normalize-iupac", action="store_true")
     ap.add_argument("--with-bertscore", action="store_true")
     ap.add_argument("--bertscore-model", default=None)
     args = ap.parse_args()
@@ -40,6 +41,7 @@ def main():
         molscribe_views=args.molscribe_views, device=args.device,
         iupac_workers=args.iupac_workers, iupac_cache=args.iupac_cache,
         biot5_path=args.biot5_path, use_description=not args.no_description,
+        normalize_iupac=not args.no_normalize_iupac,
         with_bertscore=args.with_bertscore,
         bertscore_model=args.bertscore_model)
 

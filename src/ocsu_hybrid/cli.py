@@ -36,6 +36,8 @@ def _add_pipeline_args(parser: argparse.ArgumentParser, *,
     parser.add_argument("--biot5-path", default=None,
                         help="BioT5+ directory (default: models/biot5-plus-chebi20)")
     parser.add_argument("--opsin-jar", default=None)
+    parser.add_argument("--no-normalize-iupac", action="store_true",
+                        help="keep the raw PubChem name instead of a dataset-style synonym")
     if stages:
         parser.add_argument("--no-iupac", action="store_true")
         parser.add_argument("--no-description", action="store_true")
@@ -59,6 +61,7 @@ def _pipeline(args) -> Pipeline:
         opsin_jar=args.opsin_jar,
         use_iupac=not args.no_iupac,
         use_description=not args.no_description,
+        normalize_iupac=not args.no_normalize_iupac,
         verify_iupac=args.verify_iupac,
         fg_batch_size=args.batch_size,
     )
@@ -151,6 +154,7 @@ def main(argv=None) -> int:
         molscribe_views=args.molscribe_views, device=args.device,
         iupac_workers=args.iupac_workers, iupac_cache=args.iupac_cache,
         biot5_path=args.biot5_path, use_description=not args.no_description,
+        normalize_iupac=not args.no_normalize_iupac,
         with_bertscore=args.with_bertscore,
         bertscore_model=args.bertscore_model)
     return 0 if metrics else 1

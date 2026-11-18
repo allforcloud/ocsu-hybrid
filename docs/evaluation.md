@@ -67,14 +67,16 @@ For IUPAC, the gap between the two is almost entirely coverage:
 | quantity | value |
 |---|---:|
 | coverage | 90.56% (2,427 / 2,680) |
-| BLEU-4 on covered samples | 99.03 |
-| exact name on covered samples | 91.14% |
-| exact name end-to-end | 82.54% (2,212 / 2,680) |
+| BLEU-4 on covered samples | 99.09 |
+| exact name on covered samples | 92.21% |
+| exact name end-to-end | 83.51% (2,238 / 2,680) |
 
 The IUPAC numbers use multi-view OCSR: MolScribe runs `base`, 8% padding and
-+3° rotation; the image-only FG head selects the most consistent view, and the
-other views are tried when the selected one has no PubChem record. This adds
-76 covered names and 68 exact names over single-view inference.
++3° rotation; the image-only FG head selects the most consistent view, the
+other views are tried when the selected one has no PubChem record, and names
+are switched to a dataset-style PubChem synonym when one exists for the same
+InChIKey. This adds 76 covered names and 94 exact names over single-view
+inference.
 
 ### OPSIN
 
@@ -133,10 +135,10 @@ an RTX 4060. `--limit 20` caps each task, not the whole file.
 | FG | precision / recall | 99.31 / 99.00 |
 | FG | exact set | 92.87 |
 | IUPAC | coverage | 90.56 |
-| IUPAC | BLEU-4 end-to-end | 71.97 |
-| IUPAC | BLEU-4 conditional | 99.03 |
-| IUPAC | ROUGE-1 end-to-end | 88.44 |
-| IUPAC | METEOR end-to-end | 88.37 |
+| IUPAC | BLEU-4 end-to-end | 72.01 |
+| IUPAC | BLEU-4 conditional | 99.09 |
+| IUPAC | ROUGE-1 end-to-end | 88.50 |
+| IUPAC | METEOR end-to-end | 88.44 |
 | description | BLEU-4 | 48.26 |
 | description | ROUGE-2 | 49.21 |
 | description | ROUGE-L | 57.27 |

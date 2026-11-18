@@ -45,7 +45,7 @@ view. The base result is retained when it is already valid, and the other views
 are tried if the selected one has no PubChem record. The OCSR stage reaches
 86.70 Acc_s; the full pipeline reports 85.42 after the name-consistency
 fallback. IUPAC coverage rises from 87.72% to 90.56% and BLEU-4 from 65.98 to
-71.97.
+72.01.
 
 **Learned functional-group head instead of the dictionary.** The deterministic
 `RDKit + OCSU dictionary` path can only see SMILES connectivity; its ceiling is
@@ -56,9 +56,11 @@ no FG checkpoint and is useful for debugging.
 **PubChem retrieval instead of name generation.** Every returned IUPAC name is a
 database record. MolScribe runs three deterministic views and the image-only FG
 head keeps the most consistent one, which lifts retrieval coverage to 90.56%.
-On covered molecules, BLEU-4 is 99.03 and 91.14% of names are character-identical
-to the ground truth. Every name is backed by a PubChem record; if no view
-resolves, the field stays empty rather than being guessed.
+Names are then switched to a dataset-style synonym only when it is also a
+PubChem synonym for the same InChIKey. On covered molecules, BLEU-4 is 99.09
+and 92.21% of names are character-identical to the ground truth. Every name is
+backed by a PubChem record; if no view resolves, the field stays empty rather
+than being guessed.
 
 **BioT5+ with RDKit canonicalisation.** MolScribe occasionally emits explicit
 hydrogens and unusual ring closures; SELFIES built from those is out of

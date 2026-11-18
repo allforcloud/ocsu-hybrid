@@ -35,8 +35,8 @@ two routes and this project are compared side by side.
 | SMILES | Acc_c | **82.07** | 75.10 | 77.60 | — | — |
 | SMILES | Tanimoto | **94.28** | 90.80 | 92.70 | — | — |
 | functional groups | F1 | **99.07** | 89.60 | 93.63 | 95.40 | 97.32 |
-| IUPAC | BLEU-4 | **71.97** | 61.03 | 64.23 | 72.79 | **76.95** |
-| IUPAC | ROUGE-1 | **88.44** | 82.73 | 84.45 | — | 81.88 |
+| IUPAC | BLEU-4 | **72.01** | 61.03 | 64.23 | 72.79 | **76.95** |
+| IUPAC | ROUGE-1 | **88.50** | 82.73 | 84.45 | — | 81.88 |
 | description | BLEU-4 | **48.26** | 44.64 | 45.56 | 40.26 | 46.14 |
 | description | METEOR | **60.39** | 57.09 | 58.07 | — | 58.14 |
 
@@ -44,10 +44,11 @@ two routes and this project are compared side by side.
 generating them. MolScribe runs with three deterministic views (`base`, 8% pad,
 +3° rotation); the image-only FG head picks the most consistent view, and the
 base result is kept when it is already valid. If the selected view has no
-PubChem record, the other views are tried before giving up. On the 90.56% of
-test molecules where a record is found, BLEU-4 is **99.03** and **91.14%** of
-names are character-identical to the ground truth; end-to-end, 82.5% of all
-2,680 names are exact.
+PubChem record, the other views are tried before giving up. Names are then
+switched to a dataset-style PubChem synonym when one exists for the same
+InChIKey. On the 90.56% of test molecules where a record is found, BLEU-4 is
+**99.09** and **92.21%** of names are character-identical to the ground truth;
+end-to-end, 83.5% of all 2,680 names are exact.
 
 All four headline metrics (SMILES Acc_s, functional-group F1, IUPAC BLEU-4 and
 description BLEU-4) meet or beat the best OCSR-based column. Functional groups
@@ -96,6 +97,8 @@ executed on one RTX 4060.
 - ConvNeXt-T 140-class functional-group head, trained from Vis-CheBI20 captions.
 - PubChem IUPAC retrieval with canonical SMILES, InChIKey, Kekulé, CID and
   largest-fragment fallbacks; hit-only cache.
+- Dataset-style synonym normalization, accepted only when the target is a
+  PubChem synonym for the same InChIKey.
 - BioT5+ description with RDKit canonicalisation before SELFIES.
 - Optional OPSIN name → structure verification.
 - Paper-aligned evaluation for all four tasks.
@@ -231,6 +234,7 @@ ocsu eval --data-dir /path/to/vischebi20 --out results/full_test \
 `--molscribe-views` enables multi-view OCSR test-time augmentation. The FG head
 selects the most consistent view; the base result is kept when it is already
 valid. Omit the flag for single-view inference (about 2.3× faster OCSR).
+`--no-normalize-iupac` disables the dataset-style synonym step.
 
 Smoke test first (20 samples per task):
 
@@ -292,7 +296,7 @@ Expected result on an RTX 4060 8 GB:
 ```
 SMILES      Acc_s 85.42  Acc_g 88.79  Acc_c 82.07  Tanimoto 94.28
 FG          F1 99.07  P 99.31  R 99.00  exact 92.87
-IUPAC       coverage 90.56%  BL-4 71.97  R-1 88.44  METEOR 88.37
+IUPAC       coverage 90.56%  BL-4 72.01  R-1 88.50  METEOR 88.44
 Description BL-4 48.26  R-2 49.21  R-L 57.27  METEOR 60.39
 ```
 
@@ -379,8 +383,9 @@ OCSR stack in a separate environment, set `MOLSCRIBE_PY=/path/to/python` or pass
 2. **Multi-view OCSR is selected by the image head.** MolScribe runs three
    deterministic views; the ConvNeXt-T head keeps the view whose functional
    groups best match the image; the other views are tried if the selected one
-   has no PubChem record. This raises coverage to 90.56% and hit-only BLEU-4 to
-   99.03.
+   has no PubChem record. A dataset-style synonym is used only when it is also
+   a PubChem synonym for the same InChIKey. This raises coverage to 90.56% and
+   hit-only BLEU-4 to 99.09.
 3. **Functional-group labels follow the 140-class OCSU dictionary.** The head
    learns image → dictionary group; it does not localise groups or generate
    free-form chemistry text.

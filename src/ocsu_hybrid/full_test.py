@@ -13,6 +13,7 @@ from typing import Iterable, List
 
 from .evaluate.report import evaluate_predictions, format_summary
 from .fg.dictionary import get_func_groups
+from .iupac.style import inchikey, normalize_name, normalize_text
 from .pipeline import Pipeline
 from .validate import validate_smiles
 
@@ -90,6 +91,7 @@ def run_full_test(data_dir: str | Path, out_dir: str | Path, *,
                   iupac_cache: str | Path | None = None,
                   biot5_path: str | Path | None = None,
                   use_description: bool = True,
+                  normalize_iupac: bool = True,
                   with_bertscore: bool = False,
                   bertscore_model: str | None = None) -> dict:
     data_dir = Path(data_dir)
@@ -121,6 +123,7 @@ def run_full_test(data_dir: str | Path, out_dir: str | Path, *,
         biot5_path=biot5_path,
         use_iupac=True,
         use_description=use_description,
+        normalize_iupac=normalize_iupac,
     )
 
     # ------------------------------------------------------------------ OCSR
@@ -250,6 +253,35 @@ def run_full_test(data_dir: str | Path, out_dir: str | Path, *,
                     print(f"[iupac] recovered {recovered} names from other views",
                           flush=True)
         print(f"[iupac] done in {time.time() - started:.1f}s", flush=True)
+
+    if normalize_iupac:
+        pending = {}
+        for image in iupac_images:
+            row = iupac_rows.get(image)
+            name = (row or {}).get("pred")
+            if not name:
+                continue
+            candidate = normalize_name(name)
+            if candidate == name:
+                continue
+            key = inchikey(canonical.get(image))
+            if not key:
+                continue
+            pending.setdefault(key, []).append((image, candidate))
+        normalized = 0
+        for key, items in pending.items():
+            synonyms = pipeline.resolver().synonyms(key)
+            if not synonyms:
+                continue
+            allowed = {normalize_text(item) for item in synonyms}
+            for image, candidate in items:
+                if normalize_text(candidate) in allowed:
+                    iupac_rows[image]["pred"] = candidate
+                    normalized += 1
+        if normalized:
+            _write_jsonl(iupac_path, [iupac_rows[image] for image in iupac_images
+                                      if image in iupac_rows])
+            print(f"[iupac] normalized {normalized} names", flush=True)
 
     # -------------------------------------------------------------- description
     desc_path = pred_dir / "desc.jsonl"

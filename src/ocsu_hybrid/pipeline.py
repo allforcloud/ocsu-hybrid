@@ -18,6 +18,7 @@ from .fg.classifier import FGClassifier
 from .fg.dictionary import get_func_groups
 from .iupac.opsin import verify as verify_name
 from .iupac.pubchem import PubChemResolver
+from .iupac.style import inchikey, normalize_name, normalize_text
 from .ocsr.molscribe import MolScribeOCR
 from .validate import validate_smiles
 
@@ -36,6 +37,7 @@ class Pipeline:
                  opsin_jar: str | Path | None = None,
                  use_iupac: bool = True,
                  use_description: bool = True,
+                 normalize_iupac: bool = True,
                  verify_iupac: bool = False,
                  fg_batch_size: int = 32):
         if fg_backend not in ("classifier", "dictionary"):
@@ -44,6 +46,7 @@ class Pipeline:
         self.device = device
         self.use_iupac = use_iupac
         self.use_description = use_description
+        self.normalize_iupac = normalize_iupac
         self.verify_iupac = verify_iupac
         self.fg_batch_size = fg_batch_size
         self.iupac_workers = iupac_workers
@@ -127,6 +130,32 @@ class Pipeline:
                     row["smiles"] = base["smiles"]
         return rows
 
+    def normalize_names(self, names_sources: List[tuple],
+                        canonical: Sequence[Optional[str]]) -> int:
+        """Switch to a dataset-style PubChem synonym when one exists."""
+        pending: dict[str, list] = {}
+        for index, (name, source) in enumerate(names_sources):
+            if not name:
+                continue
+            candidate = normalize_name(name)
+            if candidate == name:
+                continue
+            key = inchikey(canonical[index])
+            if not key:
+                continue
+            pending.setdefault(key, []).append((index, candidate))
+        changed = 0
+        for key, items in pending.items():
+            synonyms = self.resolver().synonyms(key)
+            if not synonyms:
+                continue
+            allowed = {normalize_text(item) for item in synonyms}
+            for index, candidate in items:
+                if normalize_text(candidate) in allowed:
+                    names_sources[index] = (candidate, names_sources[index][1])
+                    changed += 1
+        return changed
+
     def analyze(self, image: str | Path, **overrides) -> dict:
         return self.analyze_batch([image], **overrides)[0]
 
@@ -208,6 +237,9 @@ class Pipeline:
                     if self.fg_backend == "dictionary" and recovered:
                         for i in recovered:
                             groups[i] = get_func_groups(canonical[i])
+
+        if use_iupac and self.normalize_iupac:
+            self.normalize_names(names_sources, canonical)
 
         # Description -------------------------------------------------------
         desc_started = time.perf_counter()
