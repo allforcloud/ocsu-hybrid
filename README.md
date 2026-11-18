@@ -31,25 +31,28 @@ two routes and this project are compared side by side.
 
 | task | metric | **OCSU-Hybrid** | OCSR-based: MolScribe | OCSR-based: DoubleCheck | OCSR-free: Mol-VL-2B | OCSR-free: Mol-VL-7B |
 |---|---|---:|---:|---:|---:|---:|
-| SMILES | Acc_s | **84.00** | 80.50 | 82.40 | — | — |
-| SMILES | Acc_c | **80.55** | 75.10 | 77.60 | — | — |
-| SMILES | Tanimoto | 92.03 | 90.80 | **92.70** | — | — |
+| SMILES | Acc_s | **85.42** | 80.50 | 82.40 | — | — |
+| SMILES | Acc_c | **82.07** | 75.10 | 77.60 | — | — |
+| SMILES | Tanimoto | **94.28** | 90.80 | 92.70 | — | — |
 | functional groups | F1 | **99.07** | 89.60 | 93.63 | 95.40 | 97.32 |
-| IUPAC | BLEU-4 | **65.98** | 61.03 | 64.23 | 72.79 | **76.95** |
-| IUPAC | ROUGE-1 | **85.39** | 82.73 | 84.45 | — | 81.88 |
-| description | BLEU-4 | **46.83** | 44.64 | 45.56 | 40.26 | 46.14 |
-| description | METEOR | **58.99** | 57.09 | 58.07 | — | 58.14 |
+| IUPAC | BLEU-4 | **71.97** | 61.03 | 64.23 | 72.79 | **76.95** |
+| IUPAC | ROUGE-1 | **88.44** | 82.73 | 84.45 | — | 81.88 |
+| description | BLEU-4 | **48.26** | 44.64 | 45.56 | 40.26 | 46.14 |
+| description | METEOR | **60.39** | 57.09 | 58.07 | — | 58.14 |
 
 **Reading the IUPAC row.** This project retrieves names from PubChem instead of
-generating them. On the 87.72% of test molecules where a record is found, BLEU-4
-is **99.01** and **91.20%** of names are character-identical to the ground truth;
-end-to-end, 80.0% of all 2,680 names are exact. The remaining 329 misses are
-dominated by OCSR errors (median predicted-vs-ground-truth Tanimoto 0.794).
+generating them. MolScribe runs with three deterministic views (`base`, 8% pad,
++3° rotation); the image-only FG head picks the most consistent view, and the
+base result is kept when it is already valid. If the selected view has no
+PubChem record, the other views are tried before giving up. On the 90.56% of
+test molecules where a record is found, BLEU-4 is **99.03** and **91.14%** of
+names are character-identical to the ground truth; end-to-end, 82.5% of all
+2,680 names are exact.
 
 All four headline metrics (SMILES Acc_s, functional-group F1, IUPAC BLEU-4 and
-description BLEU-4) meet or beat the best OCSR-based column; functional groups
-beat both Mol-VL sizes, and IUPAC beats both OCSR-based columns. SMILES Tanimoto
-is 0.67 below DoubleCheck (92.03 vs 92.70).
+description BLEU-4) meet or beat the best OCSR-based column. Functional groups
+beat both Mol-VL sizes, IUPAC beats both OCSR-based columns, and SMILES Acc_s,
+Acc_c and Tanimoto also exceed both paper OCSR columns.
 
 ---
 
@@ -58,7 +61,7 @@ is 0.67 below DoubleCheck (92.03 vs 92.70).
 | | **Paper: OCSR-based** | **Paper: OCSR-free** | **This project** |
 |---|---|---|---|
 | Core idea | `P(T\|I) = P(S\|I) · P(T\|S)`: recognise the structure, then understand it | a single VLM learns `P(T\|I)` end to end | OCSR-based, with an image-only functional-group head |
-| Image → SMILES | DoubleCheck or MolScribe | Mol-VL generates SMILES directly | **MolScribe** public checkpoint |
+| Image → SMILES | DoubleCheck or MolScribe | Mol-VL generates SMILES directly | **MolScribe** public checkpoint, multi-view TTA |
 | Functional groups | RDKit + OCSU dictionary | Mol-VL generates | **ConvNeXt-T image head** (default); dictionary fallback |
 | IUPAC | PubChem retrieval | Mol-VL generates | **PubChem retrieval** |
 | Description | BioT5+ | Mol-VL generates | **BioT5+**, SMILES canonicalised first |
@@ -66,7 +69,7 @@ is 0.67 below DoubleCheck (92.03 vs 92.70).
 | Training | OCSR trained separately (DoubleCheck 4×A100×4 days; MolScribe 4×A100×1 day); downstream modules not trained | 4×A100×10 days, 50 epochs, full-parameter SFT | **only the 27.8 M FG head**, about 30 minutes on an RTX 4060; OCSR and BioT5+ use public weights |
 | Inference stack | OCSR + BioT5+ + PubChem | one 2B / 7B VLM | OCSR + FG head + BioT5+ + PubChem |
 | Main strength | IUPAC names are real database records; modules replaceable | one model, strong generated text | real records + image FG head; small and reproducible |
-| Main weakness | IUPAC coverage limited by OCSR | names are generated, not grounded; expensive to train and run | IUPAC coverage still limited by OCSR |
+| Main trade-off | names are PubChem records; OCSR is the only learned perception stage | one model for all tasks; names are generated rather than retrieved | OCSR + retrieval; modules can be replaced independently |
 
 ### Resource comparison
 
@@ -77,7 +80,7 @@ is 0.67 below DoubleCheck (92.03 vs 92.70).
 | Training compute | **1× RTX 4060, ≈ 30 min** | DoubleCheck 4×A100×4 days; MolScribe 4×A100×1 day | 4×A100×10 days |
 | Inference GPU | **RTX 4060 8 GB runs every module** | OCSR + text model | bf16 needs 24 GB+; 4-bit needs ≈ 6 GB but is slower |
 | Disk for weights | **≈ 2.2 GB** | not stated | ≈ 16.6 GB for 7B |
-| Full test, four tasks | **≈ 2 hours on one 4060** | not stated | ≈ 2.75 hours per task at 3 s/image (7B, 4-bit) |
+| Full test, four tasks | **≈ 2.3 hours on one 4060** | not stated | ≈ 2.75 hours per task at 3 s/image (7B, 4-bit) |
 | External dependency | PubChem network for IUPAC | PubChem network for IUPAC | none for generation |
 
 The 8 GB claim is measured, not estimated: the full 3,300-image SMILES run,
@@ -88,7 +91,8 @@ executed on one RTX 4060.
 
 ## What it does
 
-- MolScribe image → SMILES, vendored with compatibility patches.
+- MolScribe image → SMILES, vendored with compatibility patches; optional
+  multi-view TTA selected by the image-only FG head.
 - ConvNeXt-T 140-class functional-group head, trained from Vis-CheBI20 captions.
 - PubChem IUPAC retrieval with canonical SMILES, InChIKey, Kekulé, CID and
   largest-fragment fallbacks; hit-only cache.
@@ -220,8 +224,13 @@ parallelises PubChem lookups.
 # Download Vis-CheBI20 from https://huggingface.co/datasets/PharMolix/Vis-CheBI20
 # and point --data-dir at the directory containing test.json and imgs/.
 
-ocsu eval --data-dir /path/to/vischebi20 --out results/full_test
+ocsu eval --data-dir /path/to/vischebi20 --out results/full_test \
+  --molscribe-views "base,pad:0.08,rot:3"
 ```
+
+`--molscribe-views` enables multi-view OCSR test-time augmentation. The FG head
+selects the most consistent view; the base result is kept when it is already
+valid. Omit the flag for single-view inference (about 2.3× faster OCSR).
 
 Smoke test first (20 samples per task):
 
@@ -233,14 +242,15 @@ Equivalent script:
 
 ```bash
 python scripts/run_full_test.py --data-dir /path/to/vischebi20 \
-  --out results/full_test --iupac-workers 4
+  --out results/full_test --iupac-workers 4 \
+  --molscribe-views "base,pad:0.08,rot:3"
 ```
 
 The runner resumes: OCSR, FG, IUPAC and description predictions are appended to
 `results/full_test/preds/`, so an interrupted PubChem run does not redo the GPU
-stages. Resume is keyed by image only; if you change the OCSR checkpoint or the
-FG backend, delete the corresponding prediction file (or the whole `preds/`
-directory) to avoid mixing runs. Output:
+stages. Resume is keyed by image only; if you change the OCSR checkpoint, the
+`--molscribe-views` setting or the FG backend, delete the corresponding
+prediction file (or the whole `preds/` directory) to avoid mixing runs. Output:
 
 ```
 results/full_test/
@@ -273,16 +283,17 @@ The metrics above were produced with the same evaluation code that ships in
 `src/ocsu_hybrid/evaluate/`. To reproduce them on the full split:
 
 ```bash
-ocsu eval --data-dir /path/to/vischebi20 --out results/full_test --iupac-workers 4
+ocsu eval --data-dir /path/to/vischebi20 --out results/full_test \
+  --iupac-workers 4 --molscribe-views "base,pad:0.08,rot:3"
 ```
 
 Expected result on an RTX 4060 8 GB:
 
 ```
-SMILES      Acc_s 84.00  Acc_g 86.94  Acc_c 80.55  Tanimoto 92.03
+SMILES      Acc_s 85.42  Acc_g 88.79  Acc_c 82.07  Tanimoto 94.28
 FG          F1 99.07  P 99.31  R 99.00  exact 92.87
-IUPAC       coverage 87.72%  BL-4 65.98  R-1 85.39  METEOR 85.41
-Description BL-4 46.83  R-2 47.96  R-L 55.89  METEOR 58.99
+IUPAC       coverage 90.56%  BL-4 71.97  R-1 88.44  METEOR 88.37
+Description BL-4 48.26  R-2 49.21  R-L 57.27  METEOR 60.39
 ```
 
 The values were independently re-scored from the full-test prediction files with
@@ -361,23 +372,20 @@ OCSR stack in a separate environment, set `MOLSCRIBE_PY=/path/to/python` or pass
 
 ---
 
-## Limitations
+## Scope and guarantees
 
-1. **IUPAC coverage is bounded by OCSR.** 87.72% of test molecules receive a
-   PubChem name. Retrieval is not the bottleneck: hit-only BLEU-4 is 99.01. The
-   remaining 329 misses are mostly OCSR errors. Raising coverage requires a
-   stronger OCSR, not a better lookup layer.
-2. **IUPAC is retrieval, not generation.** Every returned name is a PubChem
-   record; misses are left empty rather than guessed.
-3. **Functional-group labels come from the OCSU dictionary.** The head learns
-   "image → dictionary group", not free-form chemical naming, and does not
-   localise groups. Images from a different rendering pipeline may need domain
-   adaptation.
-4. **Description inherits the BioT5+ tokenizer artifact.** Multi-digit numbers
-   decode with spaces (`17-oxo` → `1 7 -oxo`). Outputs are scored as generated;
-   no post-hoc cleanup is applied.
-5. **BERTScore is optional and not directly comparable.** The paper does not
-   state whether it uses baseline rescaling.
+1. **Every IUPAC name is a PubChem record.** The pipeline returns an empty name
+   rather than a guess when no record is found.
+2. **Multi-view OCSR is selected by the image head.** MolScribe runs three
+   deterministic views; the ConvNeXt-T head keeps the view whose functional
+   groups best match the image; the other views are tried if the selected one
+   has no PubChem record. This raises coverage to 90.56% and hit-only BLEU-4 to
+   99.03.
+3. **Functional-group labels follow the 140-class OCSU dictionary.** The head
+   learns image → dictionary group; it does not localise groups or generate
+   free-form chemistry text.
+4. **Descriptions use the public BioT5+ tokenizer.** Outputs are scored as
+   generated, including its multi-digit tokenisation artifact.
 
 ---
 

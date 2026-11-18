@@ -161,7 +161,10 @@ class PubChemResolver:
         with self._lock:
             if canonical in cache:
                 name, source = cache[canonical]
-                return name, source or "cache"
+                # A cached miss may come from an older/rate-limited run; retry it
+                # instead of treating it as a permanent verdict.
+                if name:
+                    return name, source or "cache"
 
         name, source = None, None
 

@@ -8,9 +8,15 @@ reproduces the official preprocessing:
 
     crop white border (pad 5) -> resize 384 -> gray -> ImageNet normalize
 
+Multi-view mode (``--views``) runs several deterministic views of the same image
+and keeps the best valid candidate. ``--dump-candidates`` returns every view so
+a downstream stage (for example the functional-group head) can select one.
+This is plain test-time augmentation; no extra weights are involved.
+
 Output JSONL::
 
-    {"image": "...", "smiles": "...", "raw": "...", "error": null, "latency_s": 0.2}
+    {"image": "...", "smiles": "...", "raw": "...", "error": null,
+     "confidence": 0.91, "view": "base", "latency_s": 0.2}
 """
 from __future__ import annotations
 
@@ -130,12 +136,37 @@ def crop_white(img: np.ndarray, pad: int = 5, value: int = 255) -> np.ndarray:
                               value=(255, 255, 255))
 
 
-def preprocess(path: Path, size: int = 384) -> np.ndarray:
+def parse_view(spec: str):
+    """Parse ``base``, ``pad:0.08``, ``rot:3`` or ``zoom:0.04``."""
+    spec = spec.strip()
+    if spec == "base":
+        return ("base", 0.0, "base")
+    if ":" not in spec:
+        raise ValueError(f"bad view spec: {spec}")
+    kind, value = spec.split(":", 1)
+    if kind not in {"pad", "rot", "zoom"}:
+        raise ValueError(f"bad view kind: {kind}")
+    return (kind, float(value), spec.replace(":", ""))
+
+
+def preprocess(path: Path, size: int = 384, view=("base", 0.0, "base")):
     img = cv2.imread(str(path))
     if img is None:
         raise ValueError(f"cannot read {path}")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = crop_white(img)
+    kind, value, _ = view
+    h, w = img.shape[:2]
+    if kind == "pad":
+        p = max(1, int(min(h, w) * value))
+        img = cv2.copyMakeBorder(img, p, p, p, p, cv2.BORDER_CONSTANT,
+                                 value=(255, 255, 255))
+    elif kind == "rot":
+        matrix = cv2.getRotationMatrix2D((w / 2, h / 2), value, 1.0)
+        img = cv2.warpAffine(img, matrix, (w, h), borderValue=(255, 255, 255))
+    elif kind == "zoom":
+        d = max(1, int(min(h, w) * value))
+        img = img[d:h - d, d:w - d]
     img = cv2.resize(img, (size, size), interpolation=cv2.INTER_LINEAR)
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     img = np.stack([gray] * 3, -1).astype(np.float32) / 255.0
@@ -143,18 +174,67 @@ def preprocess(path: Path, size: int = 384) -> np.ndarray:
     return img.transpose(2, 0, 1)
 
 
-def predict_batch(swin, decoder, paths, device):
-    arrays = [preprocess(Path(p)) for p in paths]
-    x = torch.from_numpy(np.stack(arrays)).float().to(device)
-    with torch.inference_mode():
-        feats = forward_swin(swin, x)
-        preds = decoder.decode(feats, None)
-    rgb = [cv2.cvtColor(cv2.imread(p), cv2.COLOR_BGR2RGB) for p in paths]
-    smiles, _, _ = convert_graph_to_smiles(
-        [p["chartok_coords"]["coords"] for p in preds],
-        [p["chartok_coords"]["symbols"] for p in preds],
-        [p["edges"] for p in preds], images=rgb, num_workers=1)
-    return preds, smiles
+def run_view(swin, decoder, images, view, *, batch_size, device, beam_size,
+             confidence):
+    """Return {image: dict(smiles, raw, confidence, error)} for one view."""
+    out = {}
+    for i in range(0, len(images), batch_size):
+        chunk = images[i:i + batch_size]
+        t0 = time.time()
+        try:
+            arrays = [preprocess(Path(p), view=view) for p in chunk]
+            x = torch.from_numpy(np.stack(arrays)).float().to(device)
+            with torch.inference_mode():
+                feats = forward_swin(swin, x)
+                preds = decoder.decode(feats, None, beam_size=beam_size)
+            rgb = [cv2.cvtColor(cv2.imread(p), cv2.COLOR_BGR2RGB) for p in chunk]
+            smiles, _, _ = convert_graph_to_smiles(
+                [p["chartok_coords"]["coords"] for p in preds],
+                [p["chartok_coords"]["symbols"] for p in preds],
+                [p["edges"] for p in preds], images=rgb, num_workers=1)
+            dt = time.time() - t0
+            for p, pred, smi in zip(chunk, preds, smiles):
+                valid = bool(smi) and smi != "<invalid>" and Chem.MolFromSmiles(smi) is not None
+                out[p] = dict(
+                    smiles=smi if valid else None,
+                    raw=pred["chartok_coords"]["smiles"],
+                    confidence=float(pred.get("overall_score") or 0.0)
+                    if confidence else None,
+                    error=None if valid else "invalid_smiles",
+                    latency_s=round(dt / len(chunk), 3),
+                )
+        except Exception as exc:  # noqa: BLE001
+            for p in chunk:
+                try:
+                    arr = preprocess(Path(p), view=view)
+                    x = torch.from_numpy(arr).float().unsqueeze(0).to(device)
+                    with torch.inference_mode():
+                        preds = decoder.decode(forward_swin(swin, x), None,
+                                               beam_size=beam_size)
+                    rgb = [cv2.cvtColor(cv2.imread(p), cv2.COLOR_BGR2RGB)]
+                    smi, _, _ = convert_graph_to_smiles(
+                        [preds[0]["chartok_coords"]["coords"]],
+                        [preds[0]["chartok_coords"]["symbols"]],
+                        [preds[0]["edges"]], images=rgb, num_workers=1)
+                    valid = bool(smi) and smi != "<invalid>" and Chem.MolFromSmiles(smi) is not None
+                    out[p] = dict(
+                        smiles=smi if valid else None,
+                        raw=preds[0]["chartok_coords"]["smiles"],
+                        confidence=float(preds[0].get("overall_score") or 0.0)
+                        if confidence else None,
+                        error=None if valid else "invalid_smiles",
+                        latency_s=None,
+                    )
+                except Exception as exc1:  # noqa: BLE001
+                    out[p] = dict(smiles=None, raw=None, confidence=None,
+                                  error=f"{type(exc1).__name__}: {exc1}",
+                                  latency_s=None)
+            if len(chunk) > 1:
+                print(f"[warn] batch failed at {i}: {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
+        print(f"[{view[2]}] {min(i + batch_size, len(images))}/{len(images)}",
+              file=sys.stderr)
+    return out
 
 
 def main():
@@ -163,44 +243,55 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--ckpt", default=str(DEFAULT_CKPT))
     ap.add_argument("--batch-size", type=int, default=8)
-    args = ap.parse_args()
+    ap.add_argument("--beam-size", type=int, default=1)
+    ap.add_argument("--views", default="base",
+                    help="comma list: base,pad:0.08,rot:3,rot:-3,zoom:0.04")
+    ap.add_argument("--confidence", action="store_true",
+                    help="store model confidence even in single-view mode")
+    ap.add_argument("--dump-candidates", action="store_true",
+                    help="include every view candidate in the output")
+    args_c = ap.parse_args()
 
-    images = json.loads(Path(args.images_json).read_text())["images"]
+    views = [parse_view(v) for v in args_c.views.split(",") if v.strip()]
+    images = json.loads(Path(args_c.images_json).read_text())["images"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    swin, decoder = load_model(Path(args.ckpt), device)
+    swin, decoder = load_model(Path(args_c.ckpt), device)
+    need_conf = args_c.confidence or len(views) > 1
+    decoder.compute_confidence = need_conf
 
-    with open(args.out, "w", encoding="utf-8") as f:
-        for i in range(0, len(images), args.batch_size):
-            chunk = images[i:i + args.batch_size]
-            t0 = time.time()
-            try:
-                preds, smiles = predict_batch(swin, decoder, chunk, device)
-                dt = time.time() - t0
-                for p, pred, smi in zip(chunk, preds, smiles):
-                    raw = pred["chartok_coords"]["smiles"]
-                    valid = bool(smi) and smi != "<invalid>" and Chem.MolFromSmiles(smi) is not None
-                    f.write(json.dumps(dict(
-                        image=p, smiles=smi if valid else None, raw=raw, error=None,
-                        latency_s=round(dt / len(chunk), 3)), ensure_ascii=False) + "\n")
-            except Exception as exc:  # noqa: BLE001
-                if len(chunk) > 1:
-                    print(f"[warn] batch failed at {i}: {type(exc).__name__}: {exc}",
-                          file=sys.stderr)
-                for p in chunk:
-                    try:
-                        preds, smiles = predict_batch(swin, decoder, [p], device)
-                        smi = smiles[0]
-                        valid = bool(smi) and smi != "<invalid>" and Chem.MolFromSmiles(smi) is not None
-                        rec = dict(image=p, smiles=smi if valid else None,
-                                   raw=preds[0]["chartok_coords"]["smiles"],
-                                   error=None, latency_s=None)
-                    except Exception as exc1:  # noqa: BLE001
-                        rec = dict(image=p, smiles=None, raw=None,
-                                   error=f"{type(exc1).__name__}: {exc1}", latency_s=None)
-                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            f.flush()
-            print(f"[{min(i + args.batch_size, len(images))}/{len(images)}]",
-                  file=sys.stderr)
+    started = time.time()
+    candidates = {p: [] for p in images}
+    for view in views:
+        result = run_view(swin, decoder, images, view,
+                          batch_size=args_c.batch_size, device=device,
+                          beam_size=args_c.beam_size, confidence=need_conf)
+        for p, rec in result.items():
+            if rec["smiles"]:
+                candidates[p].append(dict(rec, view=view[2]))
+
+    with open(args_c.out, "w", encoding="utf-8") as f:
+        for p in images:
+            cands = candidates[p]
+            if cands:
+                best = max(cands, key=lambda r: r["confidence"] or 0.0)
+                rec = dict(image=p, smiles=best["smiles"], raw=best["raw"],
+                           error=None, confidence=best["confidence"],
+                           view=best["view"],
+                           latency_s=round((time.time() - started) / max(len(images), 1), 3))
+            else:
+                rec = dict(image=p, smiles=None, raw=None,
+                           error="no_valid_candidate", confidence=None, view=None,
+                           latency_s=round((time.time() - started) / max(len(images), 1), 3))
+            if args_c.dump_candidates:
+                rec["candidates"] = [
+                    dict(view=c["view"], smiles=c["smiles"],
+                         confidence=c["confidence"], raw=c.get("raw"))
+                    for c in cands
+                ]
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    print(f"[done] {len(images)} images, views={[v[2] for v in views]}, "
+          f"{time.time() - started:.1f}s", file=sys.stderr)
 
 
 if __name__ == "__main__":

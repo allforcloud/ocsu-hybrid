@@ -26,6 +26,7 @@ class Pipeline:
     def __init__(self, *, molscribe_ckpt: str | Path | None = None,
                  molscribe_python: str | None = None,
                  molscribe_batch_size: int = 8,
+                 molscribe_views: str = "base",
                  fg_backend: str = "classifier",
                  fg_ckpt: str | Path | None = None,
                  device: str | None = None,
@@ -48,7 +49,9 @@ class Pipeline:
         self.iupac_workers = iupac_workers
 
         self._ocr = MolScribeOCR(ckpt=molscribe_ckpt, python=molscribe_python,
-                                 batch_size=molscribe_batch_size)
+                                 batch_size=molscribe_batch_size,
+                                 views=molscribe_views,
+                                 dump_candidates=molscribe_views != "base")
         self._fg_ckpt = fg_ckpt
         self._fg: Optional[FGClassifier] = None
         self._resolver: Optional[PubChemResolver] = None
@@ -79,6 +82,51 @@ class Pipeline:
     def recognize(self, images: Sequence[str | Path]) -> List[dict]:
         return self._ocr.recognize_batch(images)
 
+    @staticmethod
+    def _fg_f1(left: Sequence[str], right: Sequence[str]) -> float:
+        a, b = set(left), set(right)
+        if not a or not b:
+            return 0.0
+        inter = len(a & b)
+        precision = inter / len(b)
+        recall = inter / len(a)
+        return (2 * precision * recall / (precision + recall)
+                if precision + recall else 0.0)
+
+    @staticmethod
+    def select_candidates(rows: List[dict],
+                          image_groups: Sequence[Sequence[str]]) -> List[dict]:
+        """Pick the TTA view whose dictionary FG set best matches the image head.
+
+        The image FG head is independent of OCSR, so it is a useful tie-breaker
+        between views. If a row has no valid candidate, keep its base result.
+        """
+        for row, groups in zip(rows, image_groups):
+            candidates = row.get("candidates") or []
+            if not candidates:
+                continue
+            best = None
+            best_score = None
+            for candidate in candidates:
+                smiles = candidate.get("smiles")
+                if not smiles:
+                    continue
+                score = (Pipeline._fg_f1(get_func_groups(smiles), groups),
+                         candidate.get("confidence") or 0.0)
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best = candidate
+            if best is not None:
+                row["smiles"] = best["smiles"]
+                row["raw"] = best.get("raw", row.get("raw"))
+                row["selected_view"] = best.get("view")
+                row["selected_confidence"] = best.get("confidence")
+            elif row.get("smiles") is None:
+                base = next((c for c in candidates if c.get("view") == "base"), None)
+                if base:
+                    row["smiles"] = base["smiles"]
+        return rows
+
     def analyze(self, image: str | Path, **overrides) -> dict:
         return self.analyze_batch([image], **overrides)[0]
 
@@ -98,22 +146,68 @@ class Pipeline:
         ocr_rows = self.recognize(paths)
         ocr_time = time.perf_counter() - started
 
-        validations = [validate_smiles(row.get("smiles")) for row in ocr_rows]
-        canonical = [v["canonical"] if v["valid"] else None for v in validations]
-
         # Functional groups -------------------------------------------------
         fg_started = time.perf_counter()
         if self.fg_backend == "classifier":
             groups = self.fg().predict(paths, batch_size=self.fg_batch_size)
         else:
-            groups = [get_func_groups(smiles) if smiles else [] for smiles in canonical]
+            groups = [get_func_groups(row.get("smiles")) if row.get("smiles") else []
+                      for row in ocr_rows]
         fg_time = time.perf_counter() - fg_started
+
+        if getattr(self._ocr, "views", "base") != "base":
+            selection_groups = groups if self.fg_backend == "classifier" else [[] for _ in paths]
+            ocr_rows = self.select_candidates(ocr_rows, selection_groups)
+            if self.fg_backend == "dictionary":
+                groups = [get_func_groups(row.get("smiles")) if row.get("smiles") else []
+                          for row in ocr_rows]
+
+        validations = [validate_smiles(row.get("smiles")) for row in ocr_rows]
+        canonical = [v["canonical"] if v["valid"] else None for v in validations]
 
         # IUPAC -------------------------------------------------------------
         iupac_started = time.perf_counter()
         names_sources = (self.resolver().resolve_many(canonical, workers=self.iupac_workers)
                          if use_iupac else [(None, None)] * len(paths))
         iupac_time = time.perf_counter() - iupac_started
+
+        # If the selected view has no PubChem record, try the other views.
+        if use_iupac:
+            missing_idx = [i for i, (name, _) in enumerate(names_sources) if not name]
+            if missing_idx:
+                alt_pairs = []
+                for i in missing_idx:
+                    seen = {canonical[i]}
+                    candidates = sorted(
+                        ocr_rows[i].get("candidates") or [],
+                        key=lambda c: (c.get("view") != "base",
+                                       -(c.get("confidence") or 0.0)))
+                    for candidate in candidates:
+                        smiles = candidate.get("smiles")
+                        value = (validate_smiles(smiles)["canonical"]
+                                 if smiles else None)
+                        if value and value not in seen:
+                            seen.add(value)
+                            alt_pairs.append((i, value))
+                if alt_pairs:
+                    unique = list(dict.fromkeys(value for _, value in alt_pairs))
+                    alt_results = dict(zip(
+                        unique, self.resolver().resolve_many(
+                            unique, workers=self.iupac_workers)))
+                    recovered = set()
+                    for i, value in alt_pairs:
+                        if names_sources[i][0]:
+                            continue
+                        name, source = alt_results.get(value, (None, None))
+                        if name:
+                            canonical[i] = value
+                            validations[i] = validate_smiles(value)
+                            ocr_rows[i]["smiles"] = value
+                            names_sources[i] = (name, source)
+                            recovered.add(i)
+                    if self.fg_backend == "dictionary" and recovered:
+                        for i in recovered:
+                            groups[i] = get_func_groups(canonical[i])
 
         # Description -------------------------------------------------------
         desc_started = time.perf_counter()
@@ -152,7 +246,10 @@ class Pipeline:
                 functional_groups=groups[i],
                 iupac=iupac,
                 description=dict(text=desc, status=desc_status),
-                ocsr=dict(error=row.get("error"), latency_s=row.get("latency_s")),
+                ocsr=dict(error=row.get("error"), latency_s=row.get("latency_s"),
+                          confidence=row.get("selected_confidence",
+                                             row.get("confidence")),
+                          view=row.get("selected_view", row.get("view"))),
                 timings_s=dict(
                     ocsr=round(ocr_time / len(paths), 3),
                     functional_groups=round(fg_time / len(paths), 3),

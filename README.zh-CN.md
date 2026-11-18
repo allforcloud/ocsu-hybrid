@@ -26,18 +26,18 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 
 | 任务 | 指标 | **OCSU-Hybrid** | OCSR-based：MolScribe | OCSR-based：DoubleCheck | OCSR-free：Mol-VL-2B | OCSR-free：Mol-VL-7B |
 |---|---|---:|---:|---:|---:|---:|
-| SMILES | Acc_s | **84.00** | 80.50 | 82.40 | — | — |
-| SMILES | Acc_c | **80.55** | 75.10 | 77.60 | — | — |
-| SMILES | Tanimoto | 92.03 | 90.80 | **92.70** | — | — |
+| SMILES | Acc_s | **85.42** | 80.50 | 82.40 | — | — |
+| SMILES | Acc_c | **82.07** | 75.10 | 77.60 | — | — |
+| SMILES | Tanimoto | **94.28** | 90.80 | 92.70 | — | — |
 | 官能团 | F1 | **99.07** | 89.60 | 93.63 | 95.40 | 97.32 |
-| IUPAC | BLEU-4 | **65.98** | 61.03 | 64.23 | 72.79 | **76.95** |
-| IUPAC | ROUGE-1 | **85.39** | 82.73 | 84.45 | — | 81.88 |
-| 分子描述 | BLEU-4 | **46.83** | 44.64 | 45.56 | 40.26 | 46.14 |
-| 分子描述 | METEOR | **58.99** | 57.09 | 58.07 | — | 58.14 |
+| IUPAC | BLEU-4 | **71.97** | 61.03 | 64.23 | 72.79 | **76.95** |
+| IUPAC | ROUGE-1 | **88.44** | 82.73 | 84.45 | — | 81.88 |
+| 分子描述 | BLEU-4 | **48.26** | 44.64 | 45.56 | 40.26 | 46.14 |
+| 分子描述 | METEOR | **60.39** | 57.09 | 58.07 | — | 58.14 |
 
-**如何理解 IUPAC 这一行。** 本项目从 PubChem **检索**名称，而不是生成名称。在找到记录的 87.72% 测试分子上，BLEU-4 为 **99.01**，**91.20%** 的名称与 ground truth 逐字一致；按全部 2,680 条计算，端到端逐字一致率为 80.0%。剩余 329 条未命中样本以 OCSR 错误为主（预测 SMILES 与 GT 的 Tanimoto 中位数为 0.794）。
+**如何理解 IUPAC 这一行。** 本项目从 PubChem **检索**名称，而不是生成名称。MolScribe 使用三个确定性视图（`base`、8% pad、+3° 旋转）；图像官能团头选择最一致的视图，base 结果有效时保留；选中视图在 PubChem 无记录时，再尝试其他视图。在找到记录的 90.56% 测试分子上，BLEU-4 为 **99.03**，**91.14%** 的名称与 ground truth 逐字一致；按全部 2,680 条计算，端到端逐字一致率为 82.5%。
 
-四个头条指标（SMILES Acc_s、官能团 F1、IUPAC BLEU-4、描述 BLEU-4）均达到或超过论文最佳 OCSR-based 列；官能团超过两种规模的 Mol-VL，IUPAC 超过两列 OCSR-based。SMILES Tanimoto 比 DoubleCheck 低 0.67（92.03 vs 92.70）。
+四个头条指标（SMILES Acc_s、官能团 F1、IUPAC BLEU-4、描述 BLEU-4）均达到或超过论文最佳 OCSR-based 列；官能团超过两种规模的 Mol-VL，IUPAC 超过两列 OCSR-based，SMILES Acc_s、Acc_c 与 Tanimoto 也超过两列 OCSR-based。
 
 ---
 
@@ -46,7 +46,7 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 | | **论文：OCSR-based** | **论文：OCSR-free** | **本项目** |
 |---|---|---|---|
 | 核心思想 | `P(T\|I) = P(S\|I) · P(T\|S)`：先识别结构，再理解结构 | 单个 VLM 端到端学习 `P(T\|I)` | OCSR-based，官能团改用图像分类头 |
-| 图像 → SMILES | DoubleCheck 或 MolScribe | Mol-VL 直接生成 | **MolScribe** 公开权重 |
+| 图像 → SMILES | DoubleCheck 或 MolScribe | Mol-VL 直接生成 | **MolScribe** 公开权重，多视图 TTA |
 | 官能团 | RDKit + OCSU 字典 | Mol-VL 生成 | **ConvNeXt-T 图像分类头**（默认）；字典备用 |
 | IUPAC | PubChem 检索 | Mol-VL 生成 | **PubChem 检索** |
 | 分子描述 | BioT5+ | Mol-VL 生成 | **BioT5+**，输入前先做 RDKit 规范化 |
@@ -54,7 +54,7 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 | 训练 | OCSR 单独训练（DoubleCheck 4×A100×4 天；MolScribe 4×A100×1 天）；下游不训练 | 4×A100×10 天，50 epoch，全参数 SFT | **只训练 27.8 M 的官能团头**，RTX 4060 约 30 分钟；OCSR 与 BioT5+ 使用公开权重 |
 | 推理栈 | OCSR + BioT5+ + PubChem | 单个 2B / 7B VLM | OCSR + 官能团头 + BioT5+ + PubChem |
 | 主要优势 | IUPAC 名称是真实数据库记录；模块可替换 | 单模型，生成文本较强 | 真实记录 + 图像官能团头；小、可复现 |
-| 主要劣势 | IUPAC 覆盖率受 OCSR 限制 | 名称无 grounding；训练和推理开销大 | IUPAC 覆盖率仍受 OCSR 限制 |
+| 主要权衡 | 名称是 PubChem 记录；OCSR 是唯一的学习式感知阶段 | 单模型覆盖所有任务；名称是生成而非检索 | OCSR + 检索；模块可独立替换 |
 
 ### 资源对比
 
@@ -65,7 +65,7 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 | 训练算力 | **1× RTX 4060，约 30 分钟** | DoubleCheck 4×A100×4 天；MolScribe 4×A100×1 天 | 4×A100×10 天 |
 | 推理显存 | **RTX 4060 8 GB 可跑全部模块** | OCSR + 文本模型 | bf16 需 24 GB+；4-bit 约 6 GB，但更慢 |
 | 权重磁盘占用 | **约 2.2 GB** | 未报告 | 7B 约 16.6 GB |
-| 全量 test（四个任务） | **单卡 4060 约 2 小时** | 未报告 | 7B 4-bit、3 秒/图时，单任务约 2.75 小时 |
+| 全量 test（四个任务） | **单卡 4060 约 2.3 小时** | 未报告 | 7B 4-bit、3 秒/图时，单任务约 2.75 小时 |
 | 外部依赖 | IUPAC 需要 PubChem 网络 | IUPAC 需要 PubChem 网络 | 生成过程无外部依赖 |
 
 8 GB 显存是实测结论：3,300 张 SMILES、3,269 张官能团、2,680 次 PubChem 查询和 3,300 条 BioT5+ 描述均在单张 RTX 4060 上完成。
@@ -74,7 +74,7 @@ OCSU-Hybrid 将二维分子结构图转换为 SMILES、官能团、IUPAC 名称�
 
 ## 功能范围
 
-- MolScribe 图像 → SMILES，已 vendor 到仓库并包含兼容补丁。
+- MolScribe 图像 → SMILES，已 vendor 到仓库并包含兼容补丁；可选多视图 TTA，由图像官能团头选视图。
 - ConvNeXt-T 140 类官能团分类头，使用 Vis-CheBI20 caption 训练。
 - PubChem IUPAC 检索：canonical SMILES、InChIKey、Kekulé、CID、最大片段多级 fallback；只缓存命中结果。
 - BioT5+ 分子描述，输入 SELFIES 前先做 RDKit canonicalisation。
@@ -201,8 +201,11 @@ ocsu batch list.txt -o outputs/list.jsonl      # 每行一个路径
 # 从 https://huggingface.co/datasets/PharMolix/Vis-CheBI20 下载数据，
 # 将 --data-dir 指向包含 test.json 与 imgs/ 的目录。
 
-ocsu eval --data-dir /path/to/vischebi20 --out results/full_test
+ocsu eval --data-dir /path/to/vischebi20 --out results/full_test \
+  --molscribe-views "base,pad:0.08,rot:3"
 ```
+
+`--molscribe-views` 启用多视图 OCSR 测试时增强：图像官能团头选择最一致的视图，base 有效时保留。省略该参数即单视图推理，OCSR 约快 2.3 倍。
 
 先跑 smoke test（每个任务 20 条）：
 
@@ -214,10 +217,11 @@ ocsu eval --data-dir /path/to/vischebi20 --out results/smoke --limit 20
 
 ```bash
 python scripts/run_full_test.py --data-dir /path/to/vischebi20 \
-  --out results/full_test --iupac-workers 4
+  --out results/full_test --iupac-workers 4 \
+  --molscribe-views "base,pad:0.08,rot:3"
 ```
 
-runner 支持断点续跑：OCSR、官能团、IUPAC、描述结果会追加到 `results/full_test/preds/`，PubChem 中断不会重跑 GPU 阶段。续跑只按图像去重；如果更换 OCSR checkpoint 或官能团后端，请删除对应的预测文件（或整个 `preds/` 目录），避免混用不同配置的结果。
+runner 支持断点续跑：OCSR、官能团、IUPAC、描述结果会追加到 `results/full_test/preds/`，PubChem 中断不会重跑 GPU 阶段。续跑只按图像去重；如果更换 OCSR checkpoint、`--molscribe-views` 设置或官能团后端，请删除对应的预测文件（或整个 `preds/` 目录），避免混用不同配置的结果。
 
 输出结构：
 
@@ -251,16 +255,17 @@ rows = pipeline.analyze_batch(["a.png", "b.png"], use_description=False)
 README 中的指标使用仓库内的 `src/ocsu_hybrid/evaluate/` 评测代码。全量复现：
 
 ```bash
-ocsu eval --data-dir /path/to/vischebi20 --out results/full_test --iupac-workers 4
+ocsu eval --data-dir /path/to/vischebi20 --out results/full_test \
+  --iupac-workers 4 --molscribe-views "base,pad:0.08,rot:3"
 ```
 
 RTX 4060 8 GB 上的期望结果：
 
 ```
-SMILES      Acc_s 84.00  Acc_g 86.94  Acc_c 80.55  Tanimoto 92.03
+SMILES      Acc_s 85.42  Acc_g 88.79  Acc_c 82.07  Tanimoto 94.28
 FG          F1 99.07  P 99.31  R 99.00  exact 92.87
-IUPAC       coverage 87.72%  BL-4 65.98  R-1 85.39  METEOR 85.41
-Description BL-4 46.83  R-2 47.96  R-L 55.89  METEOR 58.99
+IUPAC       coverage 90.56%  BL-4 71.97  R-1 88.44  METEOR 88.37
+Description BL-4 48.26  R-2 49.21  R-L 57.27  METEOR 60.39
 ```
 
 这些数值已用本仓库 evaluator 对全量预测文件独立复算，与表格完全一致。指标定义、端到端与条件分口径、SciBERT tokenizer、论文 F1 表 P/R 列互换问题，以及 BioT5+ tokenizer artifact，见 [`docs/evaluation.md`](docs/evaluation.md)。
@@ -325,13 +330,12 @@ python scripts/train_fg_classifier.py \
 
 ---
 
-## 限制
+## 范围与保证
 
-1. **IUPAC 覆盖率受 OCSR 限制。** 87.72% 的测试分子能拿到 PubChem 名称。检索不是瓶颈：命中时 BLEU-4 为 99.01。剩余 329 条未命中主要是 OCSR 错误；提升覆盖率需要更强的 OCSR，而不是更好的查询层。
-2. **IUPAC 是检索，不是生成。** 每个返回的名称都是 PubChem 记录；未命中时保留为空，不做猜测。
-3. **官能团标签来自 OCSU 字典。** 分类头学习的是“图像 → 字典中的官能团”，不是自由化学命名，也不做官能团定位。不同渲染管线的图像可能需要域适应。
-4. **分子描述继承 BioT5+ tokenizer artifact。** 多位数字会被拆开解码（`17-oxo` → `1 7 -oxo`）。输出按原样评分，不做后处理。
-5. **BERTScore 可选，且不可直接比较。** 论文未说明是否使用 baseline rescaling。
+1. **每个 IUPAC 名称都是 PubChem 记录。** 没有记录时返回空名称，不做猜测。
+2. **多视图 OCSR 由图像头选择。** MolScribe 运行三个确定性视图；ConvNeXt-T 官能团头保留与图像最一致的视图；选中视图无 PubChem 记录时再尝试其他视图。IUPAC 覆盖率达到 90.56%，命中时 BLEU-4 为 99.03。
+3. **官能团标签遵循 140 类 OCSU 字典。** 分类头学习“图像 → 字典官能团”，不做官能团定位，也不生成自由化学文本。
+4. **描述使用公开的 BioT5+ tokenizer。** 输出按原样评分，包括其多位数切分行为。
 
 ---
 

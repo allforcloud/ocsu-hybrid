@@ -66,15 +66,15 @@ For IUPAC, the gap between the two is almost entirely coverage:
 
 | quantity | value |
 |---|---:|
-| coverage | 87.72% (2,351 / 2,680) |
-| BLEU-4 on covered samples | 99.01 |
-| exact name on covered samples | 91.20% |
-| exact name end-to-end | 80.0% (2,144 / 2,680) |
+| coverage | 90.56% (2,427 / 2,680) |
+| BLEU-4 on covered samples | 99.03 |
+| exact name on covered samples | 91.14% |
+| exact name end-to-end | 82.54% (2,212 / 2,680) |
 
-The 329 misses have a median predicted-vs-ground-truth Tanimoto of 0.794: they
-are mostly OCSR errors, not PubChem lookup failures. Querying the ground-truth
-SMILES finds a PubChem record for 7 of 10 sampled misses, which confirms the
-lookup layer is not the main gap.
+The IUPAC numbers use multi-view OCSR: MolScribe runs `base`, 8% padding and
++3° rotation; the image-only FG head selects the most consistent view, and the
+other views are tried when the selected one has no PubChem record. This adds
+76 covered names and 68 exact names over single-view inference.
 
 ### OPSIN
 
@@ -125,22 +125,22 @@ an RTX 4060. `--limit 20` caps each task, not the whole file.
 
 | task | metric | value |
 |---|---|---:|
-| SMILES | Acc_s | 84.00 |
-| SMILES | Acc_g | 86.94 |
-| SMILES | Acc_c | 80.55 |
-| SMILES | Tanimoto | 92.03 |
+| SMILES | Acc_s | 85.42 |
+| SMILES | Acc_g | 88.79 |
+| SMILES | Acc_c | 82.07 |
+| SMILES | Tanimoto | 94.28 |
 | FG | F1 | 99.07 |
 | FG | precision / recall | 99.31 / 99.00 |
 | FG | exact set | 92.87 |
-| IUPAC | coverage | 87.72 |
-| IUPAC | BLEU-4 end-to-end | 65.98 |
-| IUPAC | BLEU-4 conditional | 99.01 |
-| IUPAC | ROUGE-1 end-to-end | 85.39 |
-| IUPAC | METEOR end-to-end | 85.41 |
-| description | BLEU-4 | 46.83 |
-| description | ROUGE-2 | 47.96 |
-| description | ROUGE-L | 55.89 |
-| description | METEOR | 58.99 |
+| IUPAC | coverage | 90.56 |
+| IUPAC | BLEU-4 end-to-end | 71.97 |
+| IUPAC | BLEU-4 conditional | 99.03 |
+| IUPAC | ROUGE-1 end-to-end | 88.44 |
+| IUPAC | METEOR end-to-end | 88.37 |
+| description | BLEU-4 | 48.26 |
+| description | ROUGE-2 | 49.21 |
+| description | ROUGE-L | 57.27 |
+| description | METEOR | 60.39 |
 
 These values were reproduced from the full-test prediction files with the
 `src/ocsu_hybrid/evaluate` code in this repository.

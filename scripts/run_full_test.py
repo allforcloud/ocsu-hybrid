@@ -22,10 +22,13 @@ def main():
     ap.add_argument("--fg-ckpt", default=None)
     ap.add_argument("--molscribe-ckpt", default=None)
     ap.add_argument("--molscribe-python", default=None)
+    ap.add_argument("--molscribe-views", default="base",
+                    help="e.g. 'base,pad:0.08,rot:3' for multi-view TTA")
     ap.add_argument("--device", default=None)
     ap.add_argument("--iupac-workers", type=int, default=4)
     ap.add_argument("--iupac-cache", default=None)
     ap.add_argument("--biot5-path", default=None)
+    ap.add_argument("--no-description", action="store_true")
     ap.add_argument("--with-bertscore", action="store_true")
     ap.add_argument("--bertscore-model", default=None)
     args = ap.parse_args()
@@ -33,9 +36,11 @@ def main():
         args.data_dir, args.out, limit=args.limit, batch_size=args.batch_size,
         fg_backend=args.fg_backend, fg_ckpt=args.fg_ckpt,
         molscribe_ckpt=args.molscribe_ckpt,
-        molscribe_python=args.molscribe_python, device=args.device,
+        molscribe_python=args.molscribe_python,
+        molscribe_views=args.molscribe_views, device=args.device,
         iupac_workers=args.iupac_workers, iupac_cache=args.iupac_cache,
-        biot5_path=args.biot5_path, with_bertscore=args.with_bertscore,
+        biot5_path=args.biot5_path, use_description=not args.no_description,
+        with_bertscore=args.with_bertscore,
         bertscore_model=args.bertscore_model)
 
 

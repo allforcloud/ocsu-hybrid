@@ -29,8 +29,13 @@ def _worker_env() -> dict:
 
 def recognize_batch(images: Iterable[str | Path], *, ckpt: str | Path | None = None,
                     python: Optional[str] = None, batch_size: int = 8,
+                    views: str = "base", dump_candidates: bool = False,
                     timeout: int = 7200) -> List[Dict[str, Any]]:
     """Recognize all images with one model load.
+
+    ``views`` is a comma list such as ``base,pad:0.08,rot:3``. With more than one
+    view the worker returns the most confident valid candidate; with
+    ``dump_candidates`` every view is included under ``candidates``.
 
     Returns one dict per image with ``image``, ``smiles``, ``raw``, ``error`` and
     ``latency_s``. ``smiles`` is ``None`` when the prediction is not RDKit-valid.
@@ -57,11 +62,14 @@ def recognize_batch(images: Iterable[str | Path], *, ckpt: str | Path | None = N
         inp = Path(td) / "images.json"
         out = Path(td) / "result.jsonl"
         inp.write_text(json.dumps({"images": imgs}), encoding="utf-8")
+        cmd = [py, str(WORKER), "--images-json", str(inp), "--out", str(out),
+               "--ckpt", str(checkpoint), "--batch-size", str(batch_size),
+               "--views", views]
+        if dump_candidates:
+            cmd.append("--dump-candidates")
         proc = subprocess.run(
-            [py, str(WORKER), "--images-json", str(inp), "--out", str(out),
-             "--ckpt", str(checkpoint), "--batch-size", str(batch_size)],
-            capture_output=True, text=True, timeout=timeout, env=_worker_env(),
-            check=False,
+            cmd, capture_output=True, text=True, timeout=timeout,
+            env=_worker_env(), check=False,
         )
         if proc.returncode != 0 or not out.exists():
             tail = (proc.stderr or proc.stdout or "")[-3000:]
@@ -79,14 +87,18 @@ class MolScribeOCR:
     """Small stateful facade used by the pipeline and the CLI."""
 
     def __init__(self, ckpt: str | Path | None = None, python: str | None = None,
-                 batch_size: int = 8):
+                 batch_size: int = 8, views: str = "base",
+                 dump_candidates: bool = False):
         self.ckpt = ckpt
         self.python = python
         self.batch_size = batch_size
+        self.views = views
+        self.dump_candidates = dump_candidates
 
     def recognize_batch(self, images: Iterable[str | Path], **kwargs):
         options = dict(ckpt=self.ckpt, python=self.python,
-                       batch_size=self.batch_size)
+                       batch_size=self.batch_size, views=self.views,
+                       dump_candidates=self.dump_candidates)
         options.update(kwargs)
         return recognize_batch(images, **options)
 

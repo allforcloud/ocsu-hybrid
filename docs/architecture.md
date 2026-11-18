@@ -22,7 +22,7 @@ the other three tasks consume that SMILES or the image directly.
 
 | stage | implementation | output | notes |
 |---|---|---|---|
-| OCSR | MolScribe `swin_base_char_aux_1m680k` | SMILES | public checkpoint; persistent worker |
+| OCSR | MolScribe `swin_base_char_aux_1m680k` | SMILES | public checkpoint; persistent worker; optional multi-view TTA |
 | functional groups | ConvNeXt-T multi-label head | up to 140 names | image-only; `--fg-backend dictionary` switches to RDKit |
 | IUPAC | PubChem PUG REST | name or miss | no generation; hits cached |
 | description | BioT5+ `biot5-plus-base-chebi20` | English text | SMILES canonicalised before SELFIES |
@@ -34,9 +34,18 @@ The default pipeline never loads a 7B model. The four stages together are about
 
 **MolScribe instead of DoubleCheck.** DoubleCheck is the paper's best OCSR
 backbone, but its weights are not public. MolScribe is the paper's other OCSR
-baseline, is MIT-licensed, and reaches 84.00 Acc_s on the full test split
-(paper: 80.50). The adapter is a single module, so a different OCSR checkpoint
-can be dropped in without touching the downstream stages.
+baseline, is MIT-licensed, and reaches 85.42 Acc_s in the full pipeline (the
+OCSR stage alone reaches 86.70 with multi-view TTA; 84.00 single-view; paper:
+80.50). The adapter is a single module, so a different OCSR checkpoint can be
+dropped in without touching the downstream stages.
+
+**Multi-view OCSR for rendering shift.** `--molscribe-views` runs `base`, 8%
+padding and +3° rotation, then the image-only FG head keeps the most consistent
+view. The base result is retained when it is already valid, and the other views
+are tried if the selected one has no PubChem record. The OCSR stage reaches
+86.70 Acc_s; the full pipeline reports 85.42 after the name-consistency
+fallback. IUPAC coverage rises from 87.72% to 90.56% and BLEU-4 from 65.98 to
+71.97.
 
 **Learned functional-group head instead of the dictionary.** The deterministic
 `RDKit + OCSU dictionary` path can only see SMILES connectivity; its ceiling is
@@ -45,16 +54,17 @@ directly and reaches 99.07 F1. The dictionary remains available because it needs
 no FG checkpoint and is useful for debugging.
 
 **PubChem retrieval instead of name generation.** Every returned IUPAC name is a
-database record. On the 87.72% of test molecules where the lookup succeeds,
-BLEU-4 is 99.01 and 91.20% of names are character-identical to the ground truth.
-A generative fallback can raise BLEU by producing plausible n-grams without
-adding structurally correct records, so the shipped pipeline returns only
-PubChem records and leaves misses empty.
+database record. MolScribe runs three deterministic views and the image-only FG
+head keeps the most consistent one, which lifts retrieval coverage to 90.56%.
+On covered molecules, BLEU-4 is 99.03 and 91.14% of names are character-identical
+to the ground truth. Every name is backed by a PubChem record; if no view
+resolves, the field stays empty rather than being guessed.
 
 **BioT5+ with RDKit canonicalisation.** MolScribe occasionally emits explicit
 hydrogens and unusual ring closures; SELFIES built from those is out of
 distribution for BioT5+. Canonicalising with RDKit is chemically neutral and
-lifts description BLEU-4 from 44.85 to 46.83.
+lifts description BLEU-4 from 44.85 to 46.83 single-view and 48.26 with
+multi-view OCSR.
 
 ## Request flow
 
@@ -107,12 +117,12 @@ Measured on an RTX 4060 8 GB with the full test split:
 
 | stage | time |
 |---|---|
-| MolScribe, 3,300 images | about 8 minutes at batch 8 |
+| MolScribe, 3,300 images | about 8 minutes single-view; about 20 minutes with three views |
 | ConvNeXt-T FG, 3,269 images | under 1 minute |
 | PubChem, 2,680 lookups at 4 workers | about 45 minutes |
 | BioT5+, 3,300 descriptions | about 40 minutes |
 | scoring | about 15 minutes |
-| **total** | **about 2 hours** |
+| **total** | **about 2.3 hours** |
 
 Single-image latency after model load is about 0.2–0.5 s for MolScribe and a few
 seconds for a BioT5+ description; the first call pays the model-loading cost.

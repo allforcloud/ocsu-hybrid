@@ -28,6 +28,8 @@ def _add_pipeline_args(parser: argparse.ArgumentParser, *,
     parser.add_argument("--device", default=None, help="cuda / cpu / cuda:0")
     parser.add_argument("--batch-size", type=int, default=8,
                         help="MolScribe and functional-group batch size")
+    parser.add_argument("--molscribe-views", default="base",
+                        help="MolScribe views, e.g. 'base,pad:0.08,rot:3' for TTA")
     parser.add_argument("--iupac-workers", type=int, default=4)
     parser.add_argument("--iupac-cache", default=None,
                         help="PubChem cache JSONL (default: .cache/iupac_pubchem.jsonl)")
@@ -47,6 +49,7 @@ def _pipeline(args) -> Pipeline:
         molscribe_ckpt=args.molscribe_ckpt,
         molscribe_python=args.molscribe_python,
         molscribe_batch_size=args.batch_size,
+        molscribe_views=args.molscribe_views,
         fg_backend=args.fg_backend,
         fg_ckpt=args.fg_ckpt,
         device=args.device,
@@ -95,6 +98,8 @@ def main(argv=None) -> int:
                           help="cap each task (smoke test)")
     evaluate.add_argument("--with-bertscore", action="store_true")
     evaluate.add_argument("--bertscore-model", default=None)
+    evaluate.add_argument("--no-description", action="store_true",
+                          help="skip BioT5+ (faster IUPAC/SMILES evaluation)")
     _add_pipeline_args(evaluate, stages=False, verify=False)
 
     args = parser.parse_args(argv)
@@ -142,9 +147,11 @@ def main(argv=None) -> int:
         args.data_dir, args.out, limit=args.limit,
         batch_size=args.batch_size, fg_backend=args.fg_backend,
         fg_ckpt=args.fg_ckpt, molscribe_ckpt=args.molscribe_ckpt,
-        molscribe_python=args.molscribe_python, device=args.device,
+        molscribe_python=args.molscribe_python,
+        molscribe_views=args.molscribe_views, device=args.device,
         iupac_workers=args.iupac_workers, iupac_cache=args.iupac_cache,
-        biot5_path=args.biot5_path, with_bertscore=args.with_bertscore,
+        biot5_path=args.biot5_path, use_description=not args.no_description,
+        with_bertscore=args.with_bertscore,
         bertscore_model=args.bertscore_model)
     return 0 if metrics else 1
 
